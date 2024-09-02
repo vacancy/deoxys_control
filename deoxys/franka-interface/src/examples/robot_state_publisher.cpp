@@ -114,10 +114,10 @@ void FrankaRobotStatePublisher::LoadRobotState(
 
   robot_state_msg.mutable_f_t_ee()->Add(robot_state.F_T_EE.begin(),
                                         robot_state.F_T_EE.end());
-  robot_state_msg.mutable_f_t_ne()->Add(robot_state.F_T_NE.begin(),
-                                        robot_state.F_T_NE.end());
-  robot_state_msg.mutable_ne_t_ee()->Add(robot_state.NE_T_EE.begin(),
-                                         robot_state.NE_T_EE.end());
+  robot_state_msg.mutable_f_t_ne()->Add(robot_state.F_T_EE.begin(),
+                                        robot_state.F_T_EE.end());
+  robot_state_msg.mutable_ne_t_ee()->Add(robot_state.F_T_EE.begin(),
+                                         robot_state.F_T_EE.end());
   robot_state_msg.mutable_ee_t_k()->Add(robot_state.EE_T_K.begin(),
                                         robot_state.EE_T_K.end());
   robot_state_msg.set_m_ee(robot_state.m_ee);
