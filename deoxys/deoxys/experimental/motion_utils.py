@@ -2,6 +2,7 @@
 This is an experimental file where we have some standard abstractions for certain manipulation behaviors. This part will be made standard once we've tested.
 """
 import time
+from turtledemo.forest import start
 from typing import Union
 
 import numpy as np
@@ -16,6 +17,7 @@ def reset_joints_to(
     robot_interface,
     start_joint_pos: Union[list, np.ndarray],
     controller_cfg: dict = None,
+    max_diff=0.3,
     timeout=7,
     gripper_open=False,
 ):
@@ -39,20 +41,25 @@ def reset_joints_to(
         action = start_joint_pos.tolist() + [gripper_action]
     start_time = time.time()
     while True:
-        if (
-            robot_interface.received_states
-            and robot_interface.check_nonzero_configuration()
-        ):
-            if (
-                np.max(
-                    np.abs(np.array(robot_interface.last_q) - np.array(start_joint_pos))
-                )
-                < 1e-3
-            ):
+        this_action = action.copy()
+
+        if (robot_interface.received_states and robot_interface.check_nonzero_configuration()):
+            if (np.max(np.abs(np.array(robot_interface.last_q) - np.array(start_joint_pos))) < 1e-3):
                 break
+
+            # last_q = np.array(robot_interface.last_q)
+            # target_q = np.array(start_joint_pos)
+            # current_max_diff = np.max(np.abs(target_q - last_q))
+            # if current_max_diff > max_diff:
+            #     this_action = ((target_q - last_q) / current_max_diff * max_diff + last_q).tolist() + [gripper_action]
+
+            # print('Current max diff: ', current_max_diff)
+            # print('Current joint pos: ', robot_interface.last_q, '| Desired joint pos: ', start_joint_pos)
+            # print('Current action: ', this_action)
+
         robot_interface.control(
             controller_type="JOINT_POSITION",
-            action=action,
+            action=this_action,
             controller_cfg=controller_cfg,
         )
         end_time = time.time()
