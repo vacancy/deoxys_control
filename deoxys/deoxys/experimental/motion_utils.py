@@ -2,22 +2,18 @@
 This is an experimental file where we have some standard abstractions for certain manipulation behaviors. This part will be made standard once we've tested.
 """
 import time
-from turtledemo.forest import start
 from typing import Union
 
 import numpy as np
 
-from deoxys.utils.config_utils import (get_default_controller_config,
-                                       verify_controller_config)
+from deoxys.utils.config_utils import get_default_controller_config, verify_controller_config
 
 # Joint space motion abstractions
 
-
-def reset_joints_to(
+def reset_joints_to_v1(
     robot_interface,
     start_joint_pos: Union[list, np.ndarray],
     controller_cfg: dict = None,
-    max_diff=0.3,
     timeout=7,
     gripper_open=False,
 ):
@@ -41,25 +37,13 @@ def reset_joints_to(
         action = start_joint_pos.tolist() + [gripper_action]
     start_time = time.time()
     while True:
-        this_action = action.copy()
-
         if (robot_interface.received_states and robot_interface.check_nonzero_configuration()):
             if (np.max(np.abs(np.array(robot_interface.last_q) - np.array(start_joint_pos))) < 1e-3):
                 break
 
-            # last_q = np.array(robot_interface.last_q)
-            # target_q = np.array(start_joint_pos)
-            # current_max_diff = np.max(np.abs(target_q - last_q))
-            # if current_max_diff > max_diff:
-            #     this_action = ((target_q - last_q) / current_max_diff * max_diff + last_q).tolist() + [gripper_action]
-
-            # print('Current max diff: ', current_max_diff)
-            # print('Current joint pos: ', robot_interface.last_q, '| Desired joint pos: ', start_joint_pos)
-            # print('Current action: ', this_action)
-
         robot_interface.control(
             controller_type="JOINT_POSITION",
-            action=this_action,
+            action=action,
             controller_cfg=controller_cfg,
         )
         end_time = time.time()
@@ -67,8 +51,53 @@ def reset_joints_to(
         # Add timeout
         if end_time - start_time > timeout:
             break
-    robot_interface.close()
+
     return True
+
+
+def reset_joints_to_v2(
+    robot_interface,
+    desired_joint_pos: Union[list, np.ndarray],
+    controller_cfg=None,
+    gripper_open=False,
+    timeout: float = 20, fps: int = 20, max_rad_per_second: float = np.pi / 8
+):
+    robot_interface.wait_for_state()
+    if controller_cfg is None:
+        controller_cfg = get_default_controller_config(controller_type="JOINT_IMPEDANCE")
+    else:
+        assert controller_cfg["controller_type"] == "JOINT_IMPEDANCE", (
+            "This function is only for JOINT IMPEDANCE mode. You specified "
+            + controller_cfg["controller_type"]
+        )
+        controller_cfg = verify_controller_config(controller_cfg)
+
+    current_joint_pos = np.asarray(robot_interface.last_q)
+    desired_joint_pos = np.asarray(desired_joint_pos)
+
+    max_diff = np.max(np.abs(desired_joint_pos - current_joint_pos))
+
+    if max_diff / max_rad_per_second > timeout:
+        raise RuntimeError(f"The desired joint position is too far away to reach in the given time. Required time: {max_diff / max_rad_per_second}, given time: {timeout}")
+
+    num_steps = max(int(max_diff / max_rad_per_second * fps), 2)
+
+    joint_traj = joint_interpolation_traj(
+        current_joint_pos, desired_joint_pos, num_steps=num_steps
+    )
+
+    follow_joint_traj(robot_interface, joint_traj, controller_cfg=controller_cfg, gripper_close=not gripper_open)
+
+    if np.max(np.abs(np.array(robot_interface.last_q) - np.array(desired_joint_pos))) < 1e-3:
+        return True
+    if np.max(np.abs(np.array(robot_interface.last_q) - np.array(desired_joint_pos))) > 0.1:
+        raise RuntimeError("Failed to reach the desired joint position")
+
+    reset_joints_to_v1(robot_interface, desired_joint_pos, controller_cfg=None, gripper_open=gripper_open, timeout=1.0)
+    return True
+
+
+reset_joints_to = reset_joints_to_v2
 
 
 def joint_interpolation_traj(
