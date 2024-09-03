@@ -8,6 +8,7 @@ traj_interpolator_cfg:
 
 joint_kp: [100., 100., 100., 100., 75., 150., 50.]
 joint_kd: [20., 20., 20., 20., 7.5, 15.0, 5.0]
+joint_tau_limits: [10, 10, 10, 10, 10, 5, 5]
 
 state_estimator_cfg:
   is_estimation: true

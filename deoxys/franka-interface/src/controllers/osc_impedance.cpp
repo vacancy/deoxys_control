@@ -24,8 +24,8 @@
 #include <memory>
 
 namespace controller {
-OSCImpedanceController::OSCImpedanceController() {}
-OSCImpedanceController::~OSCImpedanceController() {}
+OSCImpedanceController::OSCImpedanceController() = default;
+OSCImpedanceController::~OSCImpedanceController() = default;
 
 OSCImpedanceController::OSCImpedanceController(franka::Model &model) {
   model_ = &model;
@@ -55,31 +55,15 @@ bool OSCImpedanceController::ParseMessage(const FrankaControlMessage &msg) {
   joint_max_ << 2.8978, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973;
   joint_min_ << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973;
 
-  std::vector<double> residual_mass_array;
-  residual_mass_array.reserve(control_msg_.config().residual_mass_vec().size());
-  for (double mass_i : control_msg_.config().residual_mass_vec()) {
-    residual_mass_array.push_back(mass_i);
-  }
-  residual_mass_vec_ << Eigen::Map<const Eigen::Matrix<double, 7, 1>>(
-      residual_mass_array.data());
-
-  std::vector<double> avoidance_weights_array;
-  avoidance_weights_array.reserve(control_msg_.config().joint_limits_avoidance().size());
-  for (double weight_i : control_msg_.config().joint_limits_avoidance()) {
-    avoidance_weights_array.push_back(weight_i);
-  }
-  avoidance_weights_ << Eigen::Map<const Eigen::Matrix<double, 7, 1>>(
-      avoidance_weights_array.data());
-
-  std::vector<double> static_q_array;
-  static_q_array.reserve(control_msg_.config().nullspace_static_q().size());
-  for (double q_i : control_msg_.config().nullspace_static_q()) {
-    static_q_array.push_back(q_i);
-  }
-  static_q_task_ << Eigen::Map<const Eigen::Matrix<double, 7, 1>>(
-      static_q_array.data());
+  ParseMessageArray<double, 7>(control_msg_.config().residual_mass_vec(), residual_mass_vec_);
+  ParseMessageArray<double, 7>(control_msg_.config().joint_limits_avoidance(), avoidance_weights_);
+  ParseMessageArray<double, 7>(control_msg_.config().nullspace_static_q(), static_q_task_);
+  ParseMessageArray<double, 7>(control_msg_.config().joint_tau_limits(), joint_tau_limits_);
 
   nullspace_stiffness_ = control_msg_.config().nullspace_stiffness();
+
+  // std::cout << "OSC joint tau limits: " << joint_tau_limits_.transpose() << std::endl;
+  // std::cout << "OSC nullspace stiffness: " << nullspace_stiffness_ << std::endl;
 
   this->state_estimator_ptr_->ParseMessage(msg.state_estimator_msg());
 
@@ -259,6 +243,21 @@ std::array<double, 7> OSCImpedanceController::Step(
   }
 
   // std::cout << "OSC avoidance weights: " << avoidance_weights_.transpose() << std::endl;
+
+  if (joint_tau_limits_(0) > 1e-3) {
+    bool has_saturation = false;
+    for (int i = 0; i < 7; ++i) {
+      if (std::abs(tau_d[i]) > joint_tau_limits_[i]) {
+        has_saturation = true;
+        break;
+      }
+    }
+    if (has_saturation) {
+      std::cout << "OSC::Joint torque saturation!" << "tau_d: " << tau_d.transpose() << std::endl;
+    }
+
+    LimitAbsoluteValue(tau_d, joint_tau_limits_);
+  }
 
   std::array<double, 7> tau_d_array{};
   Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;

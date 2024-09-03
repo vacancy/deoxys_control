@@ -61,4 +61,38 @@ inline void AxisAngle(const Eigen::Vector3d axis,
   axis_angle = Eigen::AngleAxisd(angle, axis.normalized());
 }
 
+template <typename T, int N, typename ProtobufArrayType>
+inline void ParseMessageArray(const ProtobufArrayType &input, Eigen::Matrix<T, N, 1> &output) {
+  std::vector<T> array;
+  array.clear();
+  array.reserve(input.size());
+  for (double weight_i : input) {
+    array.push_back(weight_i);
+  }
+  output << Eigen::Map<Eigen::Matrix<T, N, 1>>(array.data());
+}
+
+template <typename T, int N, typename ProtobufArrayType>
+inline void ParseMessageArray(const ProtobufArrayType &input, Eigen::Array<T, N, 1> &output) {
+  std::vector<T> array;
+  array.clear();
+  array.reserve(input.size());
+  for (double weight_i : input) {
+    array.push_back(weight_i);
+  }
+  output << Eigen::Map<Eigen::Matrix<T, N, 1>>(array.data());
+}
+
+template <typename T, int N>
+inline void LimitAbsoluteValue(Eigen::Matrix<T, N, 1> &input,
+                               const Eigen::Array<T, N, 1> &limit) {
+  for (int i = 0; i < N; i++) {
+    if (input(i) > limit(i)) {
+      input(i) = limit(i);
+    } else if (input(i) < -limit(i)) {
+      input(i) = -limit(i);
+    }
+  }
+}
+
 #endif

@@ -16,6 +16,7 @@ protected:
   Eigen::Matrix<double, 7, 1> static_q_task_;
   Eigen::Array<double, 7, 1> joint_max_;
   Eigen::Array<double, 7, 1> joint_min_;
+  Eigen::Array<double, 7, 1> joint_tau_limits_;
 
   // Eigen::Matrix<double, 7, 1> smooth_current_q_;
   // Eigen::Matrix<double, 7, 1> smooth_prev_q_;

@@ -309,10 +309,12 @@ class FrankaInterface:
             osc_config.nullspace_stiffness = controller_cfg.nullspace_stiffness
             osc_config.nullspace_static_q[:] = controller_cfg.nullspace_static_q
             osc_config.joint_limits_avoidance[:] = controller_cfg.joint_limits_avoidance
+            osc_config.joint_tau_limits[:] = controller_cfg.joint_tau_limits
 
             osc_msg.config.CopyFrom(osc_config)
-            action[0:3] *= controller_cfg.action_scale.translation
-            action[3 : self.last_gripper_dim] *= controller_cfg.action_scale.rotation
+            if controller_cfg.is_delta:
+                action[0:3] *= controller_cfg.action_scale.translation
+                action[3 : self.last_gripper_dim] *= controller_cfg.action_scale.rotation
 
             logger.debug(f"OSC action: {np.round(action, 3)}")
 
@@ -349,6 +351,11 @@ class FrankaInterface:
 
             osc_config = franka_controller_pb2.FrankaOSCControllerConfig()
             osc_config.residual_mass_vec[:] = controller_cfg.residual_mass_vec
+            osc_config.nullspace_stiffness = controller_cfg.nullspace_stiffness
+            osc_config.nullspace_static_q[:] = controller_cfg.nullspace_static_q
+            osc_config.joint_limits_avoidance[:] = controller_cfg.joint_limits_avoidance
+            osc_config.joint_tau_limits[:] = controller_cfg.joint_tau_limits
+
             osc_msg.config.CopyFrom(osc_config)
 
             action[0:3] *= controller_cfg.action_scale.translation
@@ -386,6 +393,11 @@ class FrankaInterface:
 
             osc_config = franka_controller_pb2.FrankaOSCControllerConfig()
             osc_config.residual_mass_vec[:] = controller_cfg.residual_mass_vec
+            osc_config.nullspace_stiffness = controller_cfg.nullspace_stiffness
+            osc_config.nullspace_static_q[:] = controller_cfg.nullspace_static_q
+            osc_config.joint_limits_avoidance[:] = controller_cfg.joint_limits_avoidance
+            osc_config.joint_tau_limits[:] = controller_cfg.joint_tau_limits
+
             osc_msg.config.CopyFrom(osc_config)
 
             action[0:3] *= controller_cfg.action_scale.translation
@@ -458,6 +470,7 @@ class FrankaInterface:
 
             joint_impedance_msg.kp[:] = controller_cfg.joint_kp
             joint_impedance_msg.kd[:] = controller_cfg.joint_kd
+            joint_impedance_msg.joint_tau_limits[:] = controller_cfg.joint_tau_limits
 
             control_msg = franka_controller_pb2.FrankaControlMessage()
             control_msg.controller_type = (

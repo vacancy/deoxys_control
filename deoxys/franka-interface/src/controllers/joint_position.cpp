@@ -34,7 +34,6 @@ JointPositionController::JointPositionController(franka::Model &model) {
 }
 
 bool JointPositionController::ParseMessage(const FrankaControlMessage &msg) {
-
   if (!msg.control_msg().UnpackTo(&control_msg_)) {
     return false;
   }

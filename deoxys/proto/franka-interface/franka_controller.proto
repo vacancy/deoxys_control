@@ -53,6 +53,7 @@ message FrankaOSCControllerConfig {
   double nullspace_stiffness = 2;
   repeated double nullspace_static_q = 3;
   repeated double joint_limits_avoidance = 4;
+  repeated double joint_tau_limits = 5;
 }
 
 // Franka Gripper control messages
@@ -101,12 +102,14 @@ message FrankaJointPositionControllerMessage {
   double kp_gains = 2;
   double kd_gains = 3;
   double speed_factor = 4;
+  repeated double joint_tau_limits = 5;
 }
 
 message FrankaJointImpedanceControllerMessage {
   JointGoal goal = 1;
   repeated double kp = 2;
   repeated double kd = 3;
+  repeated double joint_tau_limits = 4;
 }
 
 message FrankaCartesianVelocityControllerMessage {

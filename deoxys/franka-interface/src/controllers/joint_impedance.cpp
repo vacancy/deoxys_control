@@ -26,8 +26,8 @@
 #include <memory>
 
 namespace controller {
-JointImpedanceController::JointImpedanceController() {}
-JointImpedanceController::~JointImpedanceController() {}
+JointImpedanceController::JointImpedanceController() = default;
+JointImpedanceController::~JointImpedanceController() = default;
 
 JointImpedanceController::JointImpedanceController(franka::Model &model) {
   model_ = &model;
@@ -39,27 +39,12 @@ bool JointImpedanceController::ParseMessage(const FrankaControlMessage &msg) {
     return false;
   }
 
-  // Kp << control_msg_.kp();
-  // Kd << control_msg_.kd();
-
-  std::vector<double> kp_array;
-  std::vector<double> kd_array;
-
-  kp_array.reserve(control_msg_.kp().size());
-  kd_array.reserve(control_msg_.kd().size());
-
-  for (double kp_i : control_msg_.kp()) {
-    kp_array.push_back(kp_i);
-  }
-  for (double kd_i : control_msg_.kd()) {
-    kd_array.push_back(kd_i);
-  }
-
-  Kp << Eigen::Map<const Eigen::Matrix<double, 7, 1>>(kp_array.data());
-  Kd << Eigen::Map<const Eigen::Matrix<double, 7, 1>>(kd_array.data());
-
   joint_max_ << 2.8978, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973;
   joint_min_ << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973;
+
+  ParseMessageArray<double, 7>(control_msg_.kp(), Kp);
+  ParseMessageArray<double, 7>(control_msg_.kd(), Kd);
+  ParseMessageArray<double, 7>(control_msg_.joint_tau_limits(), joint_tau_limits_);
 
   this->state_estimator_ptr_->ParseMessage(msg.state_estimator_msg());
   return true;
@@ -143,6 +128,9 @@ JointImpedanceController::Step(const franka::RobotState &robot_state,
       tau_d[i] = 0.;
   }
 
+  if (joint_tau_limits_(0) > 1e-3) {
+    LimitAbsoluteValue(tau_d, joint_tau_limits_);
+  }
   std::array<double, 7> tau_d_array{};
   Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
 

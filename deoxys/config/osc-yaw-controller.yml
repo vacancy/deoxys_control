@@ -15,7 +15,10 @@ action_scale:
   rotation: 1.0
 
 residual_mass_vec: [0.0, 0.0, 0.0, 0.0, 0.1, 0.5, 0.5]
-
+nullspace_stiffness: 1.0
+nullspace_static_q: [0.09017809387254755, -0.9824203501652151, 0.030509718397568178, -2.694229634937343, 0.057700675144720104, 1.860298714876101, 0.8713759453244422]
+joint_limits_avoidance: [1., 1., 1., 1., 1., 10., 10.]
+joint_tau_limits: [10, 10, 10, 10, 10, 5, 5]
 
 state_estimator_cfg:
   is_estimation: false
