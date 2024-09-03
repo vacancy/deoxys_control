@@ -108,6 +108,36 @@ class IKWrapper:
             "target_pos": target_pos
         }
         return predicted_joints_seq, debug_info
+
+    def ik_trajectory_to_target_pose(self, target_pos, target_rot_mat4, start_joint_positions, num_points=100, verbose=True):
+        # TODO: implement a version to reach a target rotation
+        assert(len(start_joint_positions) == 7), "start_joint_positions should be a list of 7 elements"
+        predicted_joints_seq = [np.array(start_joint_positions)]
+  
+        self.data.qpos[:] = start_joint_positions + [0.04] * 2
+        gripper_site_id = self.model.site("grip_site").id
+        jac = np.zeros((6, self.model.nv))
+  
+        mujoco.mj_step(self.model, self.data, 1)
+        current_pos = np.copy(self.data.site(gripper_site_id).xpos)
+        current_mat = np.copy(self.data.site(gripper_site_id).xmat).reshape(3, 3)
+        mujoco.mj_jacSite(self.model, self.data, jac[:3], jac[3:], gripper_site_id)
+  
+        target_mat = target_rot_mat4
+  
+        if verbose:
+            print("Current eef (pos): ", current_pos)
+            print("Predicted goal eef (pos): ", target_pos)
+  
+        for i in trange(num_points):
+            pos = current_pos + (target_pos - current_pos) * (i + 1) / (num_points)
+            predicted_joints = self.inverse_kinematics(self.model, self.data, target_mat, pos, start_joint_positions)
+            predicted_joints_seq.append(predicted_joints)
+        debug_info = {
+            "predicted_joints_seq": predicted_joints_seq,
+            "target_pos": target_pos
+        }
+        return predicted_joints_seq, debug_info
     
     def simulate_joint_sequence(self, joint_sequence, loop=False, fps=30, render=True):
 

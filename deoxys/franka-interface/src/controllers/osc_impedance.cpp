@@ -52,12 +52,8 @@ bool OSCImpedanceController::ParseMessage(const FrankaControlMessage &msg) {
   Kd_p << Kp_p.cwiseSqrt() * 2.0;
   Kd_r << Kp_r.cwiseSqrt() * 2.0;
 
-  static_q_task_ << 0.09017809387254755, -0.9824203501652151,
-      0.030509718397568178, -2.694229634937343, 0.057700675144720104,
-      1.860298714876101, 0.8713759453244422;
   joint_max_ << 2.8978, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973;
   joint_min_ << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973;
-  avoidance_weights_ << 1., 1., 1., 1., 1., 10., 10.;
 
   std::vector<double> residual_mass_array;
   residual_mass_array.reserve(control_msg_.config().residual_mass_vec().size());
@@ -66,6 +62,24 @@ bool OSCImpedanceController::ParseMessage(const FrankaControlMessage &msg) {
   }
   residual_mass_vec_ << Eigen::Map<const Eigen::Matrix<double, 7, 1>>(
       residual_mass_array.data());
+
+  std::vector<double> avoidance_weights_array;
+  avoidance_weights_array.reserve(control_msg_.config().joint_limits_avoidance().size());
+  for (double weight_i : control_msg_.config().joint_limits_avoidance()) {
+    avoidance_weights_array.push_back(weight_i);
+  }
+  avoidance_weights_ << Eigen::Map<const Eigen::Matrix<double, 7, 1>>(
+      avoidance_weights_array.data());
+
+  std::vector<double> static_q_array;
+  static_q_array.reserve(control_msg_.config().nullspace_static_q().size());
+  for (double q_i : control_msg_.config().nullspace_static_q()) {
+    static_q_array.push_back(q_i);
+  }
+  static_q_task_ << Eigen::Map<const Eigen::Matrix<double, 7, 1>>(
+      static_q_array.data());
+
+  nullspace_stiffness_ = control_msg_.config().nullspace_stiffness();
 
   this->state_estimator_ptr_->ParseMessage(msg.state_estimator_msg());
 
@@ -216,7 +230,10 @@ std::array<double, 7> OSCImpedanceController::Step(
                     (Kp_r * ori_error - Kd_r * (jacobian_ori * current_dq)));
 
   // nullspace control
-  tau_d << tau_d + Nullspace * (static_q_task_ - current_q);
+  if (nullspace_stiffness_ > 0.0) {
+    tau_d << tau_d + Nullspace * (static_q_task_ - current_q) * nullspace_stiffness_;
+  }
+  // std::cout << "OSC nullspace stiffness: " << nullspace_stiffness_ << std::endl;
 
   // Add joint avoidance potential
   Eigen::Matrix<double, 7, 1> avoidance_force;
@@ -240,6 +257,8 @@ std::array<double, 7> OSCImpedanceController::Step(
     if (dist2joint_min[i] < 0.1 && tau_d[i] < 0.)
       tau_d[i] = 0.;
   }
+
+  // std::cout << "OSC avoidance weights: " << avoidance_weights_.transpose() << std::endl;
 
   std::array<double, 7> tau_d_array{};
   Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;

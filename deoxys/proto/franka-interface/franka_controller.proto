@@ -49,8 +49,10 @@ message FrankaStateEstimatorMessage {
 // Franka OSC Controller Configuration
 
 message FrankaOSCControllerConfig {
-  repeated double residual_mass_vec =
-      1; // The manual residual mass matrix to add on the internal mass matrix
+  repeated double residual_mass_vec = 1; // The manual residual mass matrix to add on the internal mass matrix
+  double nullspace_stiffness = 2;
+  repeated double nullspace_static_q = 3;
+  repeated double joint_limits_avoidance = 4;
 }
 
 // Franka Gripper control messages

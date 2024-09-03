@@ -85,6 +85,7 @@ class FrankaInterface:
         has_gripper: bool = True,
         use_visualizer: bool = False,
         automatic_gripper_reset: bool=True,
+        auto_close: bool = False,
     ):
         general_cfg = YamlConfig(general_cfg_file).as_easydict()
         self._name = general_cfg.PC.NAME
@@ -94,6 +95,9 @@ class FrankaInterface:
 
         self._gripper_pub_port = general_cfg.NUC.GRIPPER_SUB_PORT
         self._gripper_sub_port = general_cfg.NUC.GRIPPER_PUB_PORT
+
+        self._init_q = np.array(general_cfg.ROBOT.INIT_Q, dtype='float32') if 'INIT_Q' in general_cfg.ROBOT else None
+        self._gripper_camera = general_cfg.ROBOT.GRIPPER_CAMERA if 'GRIPPER_CAMERA' in general_cfg.ROBOT else None
 
         self._context = zmq.Context()
         self._publisher = self._context.socket(zmq.PUB)
@@ -160,6 +164,32 @@ class FrankaInterface:
         # automatically reset gripper by default
         self.automatic_gripper_reset = automatic_gripper_reset
 
+        if auto_close:
+            def close():
+                print(f'Closing Franka interface: {self._name}')
+                self.close()
+            import atexit
+            atexit.register(close)
+
+    @property
+    def init_q(self):
+        return self._init_q
+
+    @property
+    def gripper_camera(self):
+        return self._gripper_camera
+
+    def wait_for_state(self, max_wait_time: float = 5.0):
+        start_time = time.time()
+        if len(self._state_buffer) < 1:
+            time.sleep(0.1)
+        while len(self._state_buffer) < 1:
+            logger.debug("Waiting for the state...")
+            time.sleep(0.1)
+            if time.time() - start_time > max_wait_time:
+                logger.error("Timeout waiting for the state. Make sure the robot is connected.")
+                exit(1)
+
     def get_state(self, no_block: bool = False):
         """_summary_
 
@@ -193,7 +223,6 @@ class FrankaInterface:
                 pass
 
     def preprocess(self):
-
         if self.automatic_gripper_reset:
             gripper_control_msg = franka_controller_pb2.FrankaGripperControlMessage()
             move_msg = franka_controller_pb2.FrankaGripperMoveMessage()
@@ -276,8 +305,11 @@ class FrankaInterface:
             osc_msg.rotational_stiffness[:] = controller_cfg.Kp.rotation
 
             osc_config = franka_controller_pb2.FrankaOSCControllerConfig()
-
             osc_config.residual_mass_vec[:] = controller_cfg.residual_mass_vec
+            osc_config.nullspace_stiffness = controller_cfg.nullspace_stiffness
+            osc_config.nullspace_static_q[:] = controller_cfg.nullspace_static_q
+            osc_config.joint_limits_avoidance[:] = controller_cfg.joint_limits_avoidance
+
             osc_msg.config.CopyFrom(osc_config)
             action[0:3] *= controller_cfg.action_scale.translation
             action[3 : self.last_gripper_dim] *= controller_cfg.action_scale.rotation

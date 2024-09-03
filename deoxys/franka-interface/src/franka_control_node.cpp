@@ -103,7 +103,7 @@ bool GetControllerType(const FrankaControlMessage &franka_control_msg,
   } else if (franka_control_msg.controller_type() ==
              FrankaControlMessage_ControllerType_TORQUE) {
     controller_type = ControllerType::TORQUE;
-  } else if (franka_control_msg.controller_type() ==           
+  } else if (franka_control_msg.controller_type() ==
              FrankaControlMessage_ControllerType_CARTESIAN_VELOCITY) {
     controller_type = ControllerType::CARTESIAN_VELOCITY;
   } else if (franka_control_msg.controller_type() ==
@@ -248,7 +248,7 @@ int main(int argc, char **argv) {
         std::make_shared<SharedMemory>();
     global_handler->logger = log_utils::get_logger(
         config["ARM_LOGGER"]["CONSOLE"]["LOGGER_NAME"].as<std::string>());
-    
+
     // Read torque limits from the global config
     global_handler->max_torque =
         control_config["CONTROL"]["SAFETY"]["MAX_TORQUE"].as<double>();
@@ -417,7 +417,7 @@ int main(int argc, char **argv) {
             global_handler->controller_ptr =
                 std::make_shared<controller::CartesianVelocityController>(model);
             global_handler->logger->info("Initialize Cartesian Velocity");
-            global_handler->running = true;            
+            global_handler->running = true;
           } else if (control_command.controller_type ==
                          ControllerType::NO_CONTROL ||
                      controller_type == ControllerType::NO_CONTROL) {

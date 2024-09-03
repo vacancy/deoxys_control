@@ -213,7 +213,7 @@ def verify_controller_config(controller_cfg: dict, use_default=True):
             }
             logger.warning("field traj_interpolator_cfg not specified!!!")
             field_missing = True
-    
+
     elif controller_cfg["controller_type"] == "CARTESIAN_VELOCITY":
         if not check_attr(controller_cfg, "traj_interpolator_cfg"):
             controller_cfg["traj_interpolator_cfg"] = {
@@ -222,7 +222,7 @@ def verify_controller_config(controller_cfg: dict, use_default=True):
             }
             logger.warning("field traj_interpolator_cfg not specified!!!")
             field_missing = True
-    
+
     if field_missing and not use_default:
         logger.error(
             "Some field in controller is not specified and default config option is not turned on!!!"

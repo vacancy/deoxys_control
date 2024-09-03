@@ -19,6 +19,7 @@ protected:
   Eigen::Array<double, 7, 1> joint_max_;
   Eigen::Array<double, 7, 1> joint_min_;
   Eigen::Array<double, 7, 1> avoidance_weights_;
+  double nullspace_stiffness_;
 
 public:
   OSCImpedanceController();
