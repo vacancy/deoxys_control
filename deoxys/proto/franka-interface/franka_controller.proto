@@ -50,10 +50,13 @@ message FrankaStateEstimatorMessage {
 
 message FrankaOSCControllerConfig {
   repeated double residual_mass_vec = 1; // The manual residual mass matrix to add on the internal mass matrix
-  double nullspace_stiffness = 2;
-  repeated double nullspace_static_q = 3;
-  repeated double joint_limits_avoidance = 4;
-  repeated double joint_tau_limits = 5;
+  repeated double residual_tau_translation_vec = 2; // The manual translational force applied to the tau
+  repeated double residual_tau_rotation_vec = 3; // The manual residual rotational force applied to the tau
+  double coriolis_stiffness = 4;
+  double nullspace_stiffness = 5;
+  repeated double nullspace_static_q = 6;
+  repeated double joint_limits_avoidance = 7;
+  repeated double joint_tau_limits = 8;
 }
 
 // Franka Gripper control messages
@@ -93,8 +96,10 @@ message FrankaOSCPoseControllerMessage {
   Goal goal = 1;
   repeated double translational_stiffness = 2;
   repeated double rotational_stiffness = 3;
-  bool termination = 4;
-  FrankaOSCControllerConfig config = 5;
+  repeated double translational_damping = 4;
+  repeated double rotational_damping = 5;
+  bool termination = 6;
+  FrankaOSCControllerConfig config = 7;
 }
 
 message FrankaJointPositionControllerMessage {

@@ -49,18 +49,42 @@ bool OSCImpedanceController::ParseMessage(const FrankaControlMessage &msg) {
       kp_position_array.data());
   Kp_r.diagonal() << Eigen::Map<const Eigen::Matrix<double, 3, 1>>(
       kp_rotation_array.data());
-  Kd_p << Kp_p.cwiseSqrt() * 2.0;
-  Kd_r << Kp_r.cwiseSqrt() * 2.0;
+
+  std::vector<double> kd_position_array, kd_rotation_array;
+  kd_position_array.reserve(3);
+  kd_rotation_array.reserve(3);
+  for (double kd_i : control_msg_.translational_damping()) {
+    kd_position_array.push_back(kd_i);
+  }
+  for (double kd_i : control_msg_.rotational_damping()) {
+    kd_rotation_array.push_back(kd_i);
+  }
+
+  if (kd_position_array[0] > 1e-5) {
+    Kd_p.diagonal() << Eigen::Map<const Eigen::Matrix<double, 3, 1>>(
+        kd_position_array.data());
+  } else {
+    Kd_p << Kp_p.cwiseSqrt() * 2.0;
+  }
+  if (kd_rotation_array[0] > 1e-5) {
+    Kd_r.diagonal() << Eigen::Map<const Eigen::Matrix<double, 3, 1>>(
+        kd_rotation_array.data());
+  } else {
+    Kd_r << Kp_r.cwiseSqrt() * 2.0;
+  }
 
   joint_max_ << 2.8978, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973;
   joint_min_ << -2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973;
 
   ParseMessageArray<double, 7>(control_msg_.config().residual_mass_vec(), residual_mass_vec_);
+  ParseMessageArray<double, 3>(control_msg_.config().residual_tau_translation_vec(), residual_tau_translation_vec_);
+  ParseMessageArray<double, 3>(control_msg_.config().residual_tau_rotation_vec(), residual_tau_rotation_vec_);
   ParseMessageArray<double, 7>(control_msg_.config().joint_limits_avoidance(), avoidance_weights_);
   ParseMessageArray<double, 7>(control_msg_.config().nullspace_static_q(), static_q_task_);
   ParseMessageArray<double, 7>(control_msg_.config().joint_tau_limits(), joint_tau_limits_);
 
   nullspace_stiffness_ = control_msg_.config().nullspace_stiffness();
+  coriolis_stiffness_ = control_msg_.config().coriolis_stiffness();
 
   // std::cout << "OSC joint tau limits: " << joint_tau_limits_.transpose() << std::endl;
   // std::cout << "OSC nullspace stiffness: " << nullspace_stiffness_ << std::endl;
@@ -201,23 +225,30 @@ std::array<double, 7> OSCImpedanceController::Step(
   control_utils::PInverse(Lambda_pos_inv, Lambda_pos);
   control_utils::PInverse(Lambda_ori_inv, Lambda_ori);
 
-  pos_error =
-      pos_error.unaryExpr([](double x) { return (abs(x) < 1e-4) ? 0. : x; });
-  ori_error =
-      ori_error.unaryExpr([](double x) { return (abs(x) < 5e-3) ? 0. : x; });
+  pos_error = pos_error.unaryExpr([](double x) { return (abs(x) < 1e-4) ? 0. : x; });
+  ori_error = ori_error.unaryExpr([](double x) { return (abs(x) < 5e-3) ? 0. : x; });
 
-  tau_d << jacobian_pos.transpose() *
-                   (Lambda_pos *
-                    (Kp_p * pos_error - Kd_p * (jacobian_pos * current_dq))) +
-               jacobian_ori.transpose() *
-                   (Lambda_ori *
-                    (Kp_r * ori_error - Kd_r * (jacobian_ori * current_dq)));
+  // std::cout << "OSC::pos_error " << pos_error.transpose() << std::endl;
+  // std::cout << "OSC::ori_error " << ori_error.transpose() << std::endl;
+
+  tau_d << jacobian_pos.transpose() * (Lambda_pos * (Kp_p * pos_error - Kd_p * (jacobian_pos * current_dq))) +
+           jacobian_ori.transpose() * (Lambda_ori * (Kp_r * ori_error - Kd_r * (jacobian_ori * current_dq)));
+
+  // std::cout << "res_tau_T = " << residual_tau_translation_vec_.transpose() << std::endl;
+  // std::cout << "res_tau_R = " << residual_tau_rotation_vec_.transpose() << std::endl;
+  tau_d << tau_d + jacobian_pos.transpose() * residual_tau_translation_vec_ + jacobian_ori.transpose() * residual_tau_rotation_vec_;
+
+  std::cout << "OSC::tau_d " << tau_d.transpose() << std::endl;
 
   // nullspace control
   if (nullspace_stiffness_ > 0.0) {
     tau_d << tau_d + Nullspace * (static_q_task_ - current_q) * nullspace_stiffness_;
   }
   // std::cout << "OSC nullspace stiffness: " << nullspace_stiffness_ << std::endl;
+
+  if (coriolis_stiffness_ > 0.0) {
+    tau_d << tau_d + Nullspace * coriolis * coriolis_stiffness_;
+  }
 
   // Add joint avoidance potential
   Eigen::Matrix<double, 7, 1> avoidance_force;

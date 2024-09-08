@@ -304,8 +304,25 @@ class FrankaInterface:
             osc_msg.translational_stiffness[:] = controller_cfg.Kp.translation
             osc_msg.rotational_stiffness[:] = controller_cfg.Kp.rotation
 
+            osc_msg.translational_damping[:] = [0.0, 0.0, 0.0]
+            osc_msg.rotational_damping[:] = [0.0, 0.0, 0.0]
+            if 'Kd' in controller_cfg:
+                osc_msg.translational_damping[:] = [controller_cfg.Kd.translation for _ in range(3)] if isinstance(controller_cfg.Kd.translation, (int, float)) else controller_cfg.Kd.translation
+                osc_msg.rotational_damping[:] = [controller_cfg.Kd.rotation for _ in range(3)] if isinstance(controller_cfg.Kd.rotation, (int, float)) else controller_cfg.Kd.rotation
+
             osc_config = franka_controller_pb2.FrankaOSCControllerConfig()
             osc_config.residual_mass_vec[:] = controller_cfg.residual_mass_vec
+
+            if 'residual_tau_translation_vec' in controller_cfg:
+                osc_config.residual_tau_translation_vec[:] = controller_cfg.residual_tau_translation_vec
+            else:
+                osc_config.residual_tau_translation_vec[:] = [0.0, 0.0, 0.0]
+            if 'residual_tau_rotation_vec' in controller_cfg:
+                osc_config.residual_tau_rotation_vec[:] = controller_cfg.residual_tau_rotation_vec
+            else:
+                osc_config.residual_tau_rotation_vec[:] = [0.0, 0.0, 0.0]
+
+            osc_config.coriolis_stiffness = controller_cfg.get('coriolis_stiffness', 0.0)
             osc_config.nullspace_stiffness = controller_cfg.nullspace_stiffness
             osc_config.nullspace_static_q[:] = controller_cfg.nullspace_static_q
             osc_config.joint_limits_avoidance[:] = controller_cfg.joint_limits_avoidance
@@ -314,7 +331,7 @@ class FrankaInterface:
             osc_msg.config.CopyFrom(osc_config)
             if controller_cfg.is_delta:
                 action[0:3] *= controller_cfg.action_scale.translation
-                action[3 : self.last_gripper_dim] *= controller_cfg.action_scale.rotation
+                action[3:self.last_gripper_dim] *= controller_cfg.action_scale.rotation
 
             logger.debug(f"OSC action: {np.round(action, 3)}")
 
@@ -349,8 +366,15 @@ class FrankaInterface:
             osc_msg.translational_stiffness[:] = controller_cfg.Kp.translation
             osc_msg.rotational_stiffness[:] = controller_cfg.Kp.rotation
 
+            osc_msg.translational_damping[:] = [0.0, 0.0, 0.0]
+            osc_msg.rotational_damping[:] = [0.0, 0.0, 0.0]
+            if 'Kd' in controller_cfg:
+                osc_msg.translational_damping[:] = [controller_cfg.Kd.translation for _ in range(3)] if isinstance(controller_cfg.Kd.translation, (int, float)) else controller_cfg.Kd.translation
+                osc_msg.rotational_damping[:] = [controller_cfg.Kd.rotation for _ in range(3)] if isinstance(controller_cfg.Kd.rotation, (int, float)) else controller_cfg.Kd.rotation
+
             osc_config = franka_controller_pb2.FrankaOSCControllerConfig()
             osc_config.residual_mass_vec[:] = controller_cfg.residual_mass_vec
+            osc_config.coriolis_stiffness = controller_cfg.get('coriolis_stiffness', 0.0)
             osc_config.nullspace_stiffness = controller_cfg.nullspace_stiffness
             osc_config.nullspace_static_q[:] = controller_cfg.nullspace_static_q
             osc_config.joint_limits_avoidance[:] = controller_cfg.joint_limits_avoidance
@@ -391,8 +415,15 @@ class FrankaInterface:
             osc_msg.translational_stiffness[:] = controller_cfg.Kp.translation
             osc_msg.rotational_stiffness[:] = controller_cfg.Kp.rotation
 
+            osc_msg.translational_damping[:] = [0.0, 0.0, 0.0]
+            osc_msg.rotational_damping[:] = [0.0, 0.0, 0.0]
+            if 'Kd' in controller_cfg:
+                osc_msg.translational_damping[:] = [controller_cfg.Kd.translation for _ in range(3)] if isinstance(controller_cfg.Kd.translation, (int, float)) else controller_cfg.Kd.translation
+                osc_msg.rotational_damping[:] = [controller_cfg.Kd.rotation for _ in range(3)] if isinstance(controller_cfg.Kd.rotation, (int, float)) else controller_cfg.Kd.rotation
+
             osc_config = franka_controller_pb2.FrankaOSCControllerConfig()
             osc_config.residual_mass_vec[:] = controller_cfg.residual_mass_vec
+            osc_config.coriolis_stiffness = controller_cfg.get('coriolis_stiffness', 0.0)
             osc_config.nullspace_stiffness = controller_cfg.nullspace_stiffness
             osc_config.nullspace_static_q[:] = controller_cfg.nullspace_static_q
             osc_config.joint_limits_avoidance[:] = controller_cfg.joint_limits_avoidance

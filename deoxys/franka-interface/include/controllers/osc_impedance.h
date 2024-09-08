@@ -14,12 +14,15 @@ protected:
   Eigen::Matrix<double, 3, 3> Kp_p, Kp_r, Kd_p, Kd_r;
 
   Eigen::Matrix<double, 7, 1> residual_mass_vec_;
+  Eigen::Matrix<double, 3, 1> residual_tau_translation_vec_;
+  Eigen::Matrix<double, 3, 1> residual_tau_rotation_vec_;
 
   Eigen::Matrix<double, 7, 1> static_q_task_;
   Eigen::Array<double, 7, 1> joint_max_;
   Eigen::Array<double, 7, 1> joint_min_;
   Eigen::Array<double, 7, 1> avoidance_weights_;
   Eigen::Array<double, 7, 1> joint_tau_limits_;
+  double coriolis_stiffness_;
   double nullspace_stiffness_;
 
 public:
