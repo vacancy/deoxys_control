@@ -93,10 +93,19 @@ void FrankaRobotStateUtils::LoadRobotStateToMsg(
 
   robot_state_msg.mutable_f_t_ee()->Add(robot_state.F_T_EE.begin(),
                                         robot_state.F_T_EE.end());
+
+#ifdef FRANKA_NON_NE_IMPLEMENTATION
+  robot_state_msg.mutable_f_t_ne()->Add(robot_state.F_T_EE.begin(),
+                                        robot_state.F_T_EE.end());
+  std::vector<double> fake_NE_T_EE(16, 0.0);
+  robot_state_msg.mutable_ne_t_ee()->Add(fake_NE_T_EE.begin(),
+                                         fake_NE_T_EE.end());
+#else
   robot_state_msg.mutable_f_t_ne()->Add(robot_state.F_T_NE.begin(),
                                         robot_state.F_T_NE.end());
   robot_state_msg.mutable_ne_t_ee()->Add(robot_state.NE_T_EE.begin(),
                                          robot_state.NE_T_EE.end());
+#endif
   robot_state_msg.mutable_ee_t_k()->Add(robot_state.EE_T_K.begin(),
                                         robot_state.EE_T_K.end());
   robot_state_msg.set_m_ee(robot_state.m_ee);

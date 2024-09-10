@@ -48,11 +48,36 @@ set(PROTO_FILES
   ${FRANKA_PROTO_FILES}
   )
 
-message("FRANKA ${BUILD_FRANKA}")
-message("DEOXYS ${BUILD_DEOXYS}")
+# Set default values for options
+
+if (NOT DEFINED BUILD_FRANKA)
+  set(BUILD_FRANKA OFF)
+endif()
+
+if (NOT DEFINED BUILD_DEOXYS)
+  set(BUILD_DEOXYS OFF)
+endif()
+
+message("BUILD_FRANKA ${BUILD_FRANKA}")
+message("BUILD_DEOXYS ${BUILD_DEOXYS}")
+
+if (NOT BUILD_FRANKA AND NOT BUILD_DEOXYS)
+  message(FATAL_ERROR "You must build at least one of the libraries")
+endif()
+
+set(LIBFRANKA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../deoxys/libfranka)
+message("LIBFRANKA_DIR ${LIBFRANKA_DIR}")
+
+execute_process(COMMAND git -C ${LIBFRANKA_DIR} describe --exact-match --tags OUTPUT_VARIABLE LIBFRANKA_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+message("LIBFRANKA_VERSION ${LIBFRANKA_VERSION}")
+
+if (LIBFRANKA_VERSION VERSION_LESS "0.8.0")
+  # Issue an warning
+  message(WARNING "You are using an old version of libfranka. In old versions NE will be set to EE in the robot state message")
+endif()
 
 if (BUILD_FRANKA)
-  message("${PROTO_NAMESPACE}")  
+  message("PROTO_NAMESPACE" "${PROTO_NAMESPACE}")
   add_proto_cc_library(shared_protobuf
     NAMESPACE ${PROTO_NAMESPACE}
     PROTO_FILES ${FRANKA_PROTO_FILES}
@@ -63,6 +88,11 @@ if (BUILD_FRANKA)
 
   set(THREADS_PREFER_PTHREAD_FLAG ON)
   find_package(Threads REQUIRED)
+
+  # Add -DFRANKA_NON_NE_IMPLEMENTATION to the compiler flags
+  if (LIBFRANKA_VERSION VERSION_LESS "0.8.0")
+    add_definitions(-DFRANKA_NON_NE_IMPLEMENTATION)
+  endif()
 
   add_subdirectory(libfranka)
   add_subdirectory(zmqpp)
@@ -85,11 +115,11 @@ if (BUILD_FRANKA)
     franka-interface/src/controllers/joint_impedance.cpp
     franka-interface/src/controllers/cartesian_velocity.cpp
     )
-  
+
   add_library(shared_utils
     franka-interface/src/utils/common_utils.cpp
     franka-interface/src/utils/control_utils.cpp
-    franka-interface/src/utils/robot_utils.cpp    
+    franka-interface/src/utils/robot_utils.cpp
     franka-interface/src/utils/zmq_utils.cpp
     ${CONTROLLERS})
   target_link_libraries(shared_utils deoxys::shared_protobuf ${FRANKA_LIBS})
@@ -123,7 +153,6 @@ if (BUILD_FRANKA)
   # test cartesian velocity controller
   add_executable(cartesian-velocity franka-interface/src/test/test_cartesian_velocity_control.cpp)
   target_link_libraries(cartesian-velocity deoxys::shared_protobuf ${FRANKA_LIBS} deoxys::shared_utils)
-
 
   install(TARGETS
     franka-interface
