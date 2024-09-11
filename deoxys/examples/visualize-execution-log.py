@@ -9,7 +9,11 @@
 
 import jacinle
 
-with open('./debug3.log', 'r') as f:
+parser = jacinle.JacArgumentParser()
+parser.add_argument('logfile', type=str)
+args = parser.parse_args()
+
+with open(args.logfile, 'r') as f:
     lines = f.readlines()
 
 """Example:
@@ -36,12 +40,12 @@ for line in lines:
     elif line.startswith('JI::tau:'):
         current_log['tau'] = list(map(float, line.split()[1:]))
         logs.append(current_log)
-    elif line.startswith('OSC::q '):
+    elif line.startswith('OSC::q:'):
         current_log = dict()
         current_log['q'] = list(map(float, line.split()[1:]))
-    elif line.startswith('OSC::dq '):
+    elif line.startswith('OSC::dq:'):
         current_log['dq'] = list(map(float, line.split()[1:]))
-    elif line.startswith('OSC::tau_d '):
+    elif line.startswith('OSC::tau_d:'):
         current_log['tau'] = list(map(float, line.split()[1:]))
         logs.append(current_log)
     else:
