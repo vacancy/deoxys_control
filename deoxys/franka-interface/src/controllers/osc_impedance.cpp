@@ -18,6 +18,7 @@
 #include "utils/common_utils.h"
 #include "utils/control_utils.h"
 #include "utils/robot_utils.h"
+#include "utils/shared_memory.h"
 
 #include "controllers/osc_impedance.h"
 
@@ -238,7 +239,13 @@ std::array<double, 7> OSCImpedanceController::Step(
   // std::cout << "res_tau_R = " << residual_tau_rotation_vec_.transpose() << std::endl;
   tau_d << tau_d + jacobian_pos.transpose() * residual_tau_translation_vec_ + jacobian_ori.transpose() * residual_tau_rotation_vec_;
 
-  std::cout << "OSC::tau_d " << tau_d.transpose() << std::endl;
+  if (getGlobalHandler()->log_controller) {
+    std::cout << "OSC::q: " << q.transpose() << std::endl;
+    std::cout << "OSC::q_SE: " << current_q.transpose() << std::endl;
+    std::cout << "OSC::dq: " << dq.transpose() << std::endl;
+    std::cout << "OSC::dq_SE: " << current_dq.transpose() << std::endl;
+    std::cout << "OSC::tau_d: " << tau_d.transpose() << std::endl;
+  }
 
   // nullspace control
   if (nullspace_stiffness_ > 0.0) {

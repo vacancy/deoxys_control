@@ -226,7 +226,6 @@ int main(int argc, char **argv) {
       config["ARM_LOGGER"]["FILE"]["USE"].as<bool>());
 
   try {
-
     franka::Robot robot(robot_ip);
     robot.automaticErrorRecovery();
     setDefaultBehavior(robot);
@@ -244,10 +243,14 @@ int main(int argc, char **argv) {
     Eigen::Affine3d init_T_EE_in_base_frame(
         Eigen::Matrix4d::Map(init_state.O_T_EE.data()));
 
-    std::shared_ptr<SharedMemory> global_handler =
-        std::make_shared<SharedMemory>();
+    std::shared_ptr<SharedMemory> global_handler = createSharedMemory();
+    setGlobalHandler(global_handler);
     global_handler->logger = log_utils::get_logger(
         config["ARM_LOGGER"]["CONSOLE"]["LOGGER_NAME"].as<std::string>());
+    if (config["ARM_LOGGER"]["LOG_CONTROLLER"]) {
+      global_handler->log_controller = config["ARM_LOGGER"]["LOG_CONTROLLER"].as<bool>();
+    }
+    global_handler->logger->info("Log controller: {0}", global_handler->log_controller);
 
     // Read torque limits from the global config
     global_handler->max_torque =

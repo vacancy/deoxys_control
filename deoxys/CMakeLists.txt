@@ -120,6 +120,7 @@ if (BUILD_FRANKA)
     franka-interface/src/utils/common_utils.cpp
     franka-interface/src/utils/control_utils.cpp
     franka-interface/src/utils/robot_utils.cpp
+    franka-interface/src/utils/shared_memory.cpp
     franka-interface/src/utils/zmq_utils.cpp
     ${CONTROLLERS})
   target_link_libraries(shared_utils deoxys::shared_protobuf ${FRANKA_LIBS})

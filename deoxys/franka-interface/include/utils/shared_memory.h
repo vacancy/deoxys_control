@@ -36,6 +36,12 @@ struct SharedMemory {
   std::atomic_int no_msg_counter;
   std::atomic_bool start{
       false}; // indicate if a message is received and start controlling
+
+  std::atomic_bool log_controller;
 };
+
+std::shared_ptr<SharedMemory> createSharedMemory();
+std::shared_ptr<SharedMemory> getGlobalHandler();
+void setGlobalHandler(std::shared_ptr<SharedMemory> handler);
 
 #endif // DEOXYS_FRANKA_INTERFACE_INCLUDE_UTILS_SHARED_MEMORY_H_

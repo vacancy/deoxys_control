@@ -20,6 +20,7 @@
 #include "utils/common_utils.h"
 #include "utils/control_utils.h"
 #include "utils/robot_utils.h"
+#include "utils/shared_memory.h"
 
 #include "controllers/joint_impedance.h"
 
@@ -114,6 +115,14 @@ JointImpedanceController::Step(const franka::RobotState &robot_state,
   tau_d << Kp.cwiseProduct(joint_pos_error) - Kd.cwiseProduct(current_dq);
   // joint_pos_error << desired_q_ - q;
   // tau_d << Kp.cwiseProduct(joint_pos_error) - Kd.cwiseProduct(dq);
+
+  if (getGlobalHandler()->log_controller) {
+    std::cout << "JI::q: " << q.transpose() << std::endl;
+    std::cout << "JI::dq: " << dq.transpose() << std::endl;
+    std::cout << "JI::qh: " << desired_q.transpose() << std::endl;
+    std::cout << "JI::err: " << joint_pos_error.transpose() << std::endl;
+    std::cout << "JI::tau: " << tau_d.transpose() << std::endl;
+  }
 
   Eigen::Matrix<double, 7, 1> dist2joint_max;
   Eigen::Matrix<double, 7, 1> dist2joint_min;
