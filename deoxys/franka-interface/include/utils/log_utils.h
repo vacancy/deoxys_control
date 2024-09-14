@@ -11,11 +11,38 @@
 #define DEOXYS_FRANKA_INTERFACE_INCLUDE_UTILS_LOG_UTILS_H_
 
 namespace log_utils {
+
+std::string expand_home_dir(const std::string &path) {
+    char *dir = std::getenv("HOME");
+    size_t index = 0;
+    std::string retval = path;
+
+    if (dir != nullptr) {
+        std::string replace(dir);
+
+        while (true) {
+            index = retval.find("~", index);
+            if (index == std::string::npos) {
+                break;
+            }
+
+            retval.replace(index, 1, replace);
+            index += replace.size();
+        }
+    }
+
+    return retval;
+}
+
 inline void
 initialize_logger(std::string logger_name = "deoxys_logger",
                   std::string console_level = "info", bool use_console = true,
                   std::string log_filename = "logs/deoxys_control_program.log",
                   std::string file_level = "trace", bool use_file = true) {
+
+  log_filename = expand_home_dir(log_filename);
+  // std::cerr << "LOGGING TO " << log_filename << std::endl;
+
   spdlog::init_thread_pool(8192, 1);
   spdlog::cfg::load_env_levels();
   auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
