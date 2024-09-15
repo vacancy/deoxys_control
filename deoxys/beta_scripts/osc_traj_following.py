@@ -447,6 +447,40 @@ def interpolate_poses(pos1, rot1, pos2, rot2, num_steps):
     return pos_steps, rot_steps, num_steps - 1
 
 
+def interpolate_pose_trajectory(mat_list, factor: int):
+    """
+    Interpolates a list of poses (matrices) by factor.
+    """
+    num_poses = len(mat_list)
+    num_interp_poses = (num_poses - 1) * factor + 1
+
+    poses = [mat_list[0]]
+    indices = [0]
+    for i in range(num_poses - 1):
+        pos1 = mat_list[i][:3, 3]
+        rot1 = mat_list[i][:3, :3]
+        pos2 = mat_list[i + 1][:3, 3]
+        rot2 = mat_list[i + 1][:3, :3]
+
+        pos_steps, rot_steps, _ = interpolate_poses(
+            pos1=pos1,
+            rot1=rot1,
+            pos2=pos2,
+            rot2=rot2,
+            num_steps=factor,
+        )
+        for j in range(1, len(pos_steps)):
+            pose = np.eye(4)
+            pose[:3, :3] = rot_steps[j]
+            pose[:3, 3] = pos_steps[j]
+            poses.append(pose)
+            indices.append(i if j < len(pos_steps) - 1 else i+1)
+
+    # import ipdb; ipdb.set_trace()
+    # assert len(poses) == num_interp_poses
+    return poses, indices
+
+
 def interpolate_rotations(R1, R2, num_steps):
     """
     Interpolate between 2 rotation matrices.

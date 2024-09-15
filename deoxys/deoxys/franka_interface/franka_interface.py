@@ -129,6 +129,7 @@ class FrankaInterface:
 
         # state frequency
         self._state_freq = state_freq
+        self._open_gripper_width = 0.08
 
         # control timeout (s)
         self._control_timeout = control_timeout
@@ -178,6 +179,12 @@ class FrankaInterface:
     @property
     def gripper_camera(self):
         return self._gripper_camera
+
+    def set_open_gripper_width(self, width: float):
+        self._open_gripper_width = width
+
+    def reset_open_gripper_width(self):
+        self._open_gripper_width = 0.08
 
     def wait_for_state(self, max_wait_time: float = 5.0):
         start_time = time.time()
@@ -577,7 +584,7 @@ class FrankaInterface:
         # will stop executing the previous command
         if action < 0.0:  #  and self.last_gripper_action == 1):
             move_msg = franka_controller_pb2.FrankaGripperMoveMessage()
-            move_msg.width = 0.08 * np.abs(action)
+            move_msg.width = self._open_gripper_width * np.abs(action)
             move_msg.speed = 0.1
             gripper_control_msg.control_msg.Pack(move_msg)
 
