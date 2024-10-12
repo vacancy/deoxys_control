@@ -84,7 +84,7 @@ class FrankaInterface:
         control_timeout: float = 1.0,
         has_gripper: bool = True,
         use_visualizer: bool = False,
-        automatic_gripper_reset: bool=True,
+        automatic_gripper_reset: bool = False,
         auto_close: bool = False,
     ):
         general_cfg = YamlConfig(general_cfg_file).as_easydict()
@@ -562,7 +562,7 @@ class FrankaInterface:
             msg_str = control_msg.SerializeToString()
             self._publisher.send(msg_str)
 
-        if self.has_gripper:
+        if self.has_gripper and action[self.last_gripper_dim] != 0.0:
             self.gripper_control(action[self.last_gripper_dim])
 
         if self.use_visualizer and len(self._state_buffer) > 0:
@@ -591,7 +591,7 @@ class FrankaInterface:
             logger.debug("Gripper opening")
 
             self._gripper_publisher.send(gripper_control_msg.SerializeToString())
-        elif action >= 0.0:  #  and self.last_gripper_action == 0:
+        elif action > 0.0:  #  and self.last_gripper_action == 0:
             grasp_msg = franka_controller_pb2.FrankaGripperGraspMessage()
             grasp_msg.width = -0.01
             grasp_msg.speed = 0.5
@@ -604,6 +604,9 @@ class FrankaInterface:
             logger.debug("Gripper closing")
 
             self._gripper_publisher.send(gripper_control_msg.SerializeToString())
+        else:
+            # do nothing
+            return
         self.last_gripper_action = action
 
     def close(self):

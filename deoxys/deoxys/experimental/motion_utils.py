@@ -98,7 +98,7 @@ def reset_joints_to_v2(
     robot_interface: FrankaInterface,
     desired_joint_pos: Union[list, np.ndarray],
     controller_cfg: Optional[dict] = None,
-    gripper_open: bool = False, gripper_close: bool = True,
+    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None,
     timeout: float = 20, fps: int = 20, max_rad_per_second: float = np.pi / 8
 ):
     gripper_open, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default='close')
@@ -142,7 +142,7 @@ reset_joints_to = reset_joints_to_v2
 
 
 def joint_interpolation_traj(
-    start_q: Union[list, np.ndarray], end_q: Union[list, np.ndarray], num_steps: int = 100, traj_interpolator_type: str = "min_jerk"
+    start_q: Union[list, np.ndarray], end_q: Union[list, np.ndarray], num_steps: int, traj_interpolator_type: str = "min_jerk"
 ):
     assert traj_interpolator_type in ["min_jerk", "linear"]
 
@@ -162,6 +162,65 @@ def joint_interpolation_traj(
         # add endpoint
         traj = np.concatenate([traj, end_q[None]], axis=0)
     return traj
+
+
+def open_gripper(robot_interface: FrankaInterface, num_steps: int = 35, controller_cfg: Optional[dict] = None) -> None:
+    """This is a simple function to open the gripper.
+
+    Args:
+        robot_interface (FrankaInterface): the python interface for robot control
+        num_steps (int, optional): the number of steps to control. Defaults to 100.
+        controller_cfg (dict, optional): controller configurations. Defaults to None.
+
+    Returns:
+        joint_pos_history (list): a list of recorded joint positions
+        action_history (list): a list of recorded action commands
+    """
+    if controller_cfg is None:
+        controller_cfg = get_default_controller_config(controller_type="JOINT_IMPEDANCE")
+    else:
+        assert controller_cfg["controller_type"] == "JOINT_IMPEDANCE", (
+            "This function is only for JOINT IMPEDANCE mode. You specified "
+            + controller_cfg["controller_type"]
+        )
+        controller_cfg = verify_controller_config(controller_cfg)
+
+    current_joint_pos = np.array(robot_interface.last_q)
+    action = current_joint_pos.tolist() + [-1.0]
+    for i in range(num_steps):
+        robot_interface.control(
+            controller_type="JOINT_IMPEDANCE",
+            action=action,
+            controller_cfg=controller_cfg,
+        )
+
+
+def close_gripper(robot_interface: FrankaInterface, num_steps: int = 35, controller_cfg: Optional[dict] = None) -> None:
+    """This is a simple function to close the gripper.
+
+    Args:
+        robot_interface (FrankaInterface): the python interface for robot control
+        num_steps (int, optional): the number of steps to control. Defaults to 100.
+        controller_cfg (dict, optional): controller configurations. Defaults to None.
+    """
+
+    if controller_cfg is None:
+        controller_cfg = get_default_controller_config(controller_type="JOINT_IMPEDANCE")
+    else:
+        assert controller_cfg["controller_type"] == "JOINT_IMPEDANCE", (
+            "This function is only for JOINT IMPEDANCE mode. You specified "
+            + controller_cfg["controller_type"]
+        )
+        controller_cfg = verify_controller_config(controller_cfg)
+
+    current_joint_pos = np.array(robot_interface.last_q)
+    action = current_joint_pos.tolist() + [1.0]
+    for i in range(num_steps):
+        robot_interface.control(
+            controller_type="JOINT_IMPEDANCE",
+            action=action,
+            controller_cfg=controller_cfg,
+        )
 
 
 def follow_joint_traj(
