@@ -59,6 +59,12 @@ message FrankaOSCControllerConfig {
   repeated double joint_tau_limits = 8;
 }
 
+message FrankaJointImpedanceConfig {
+  bool enable_residual_tau = 1;
+  repeated double residual_tau_translation_vec = 2;
+  repeated double residual_tau_rotation_vec = 3;
+}
+
 // Franka Gripper control messages
 
 message FrankaGripperHomingMessage { bool homing = 1; }
@@ -115,6 +121,7 @@ message FrankaJointImpedanceControllerMessage {
   repeated double kp = 2;
   repeated double kd = 3;
   repeated double joint_tau_limits = 4;
+  FrankaJointImpedanceConfig config = 5;
 }
 
 message FrankaCartesianVelocityControllerMessage {

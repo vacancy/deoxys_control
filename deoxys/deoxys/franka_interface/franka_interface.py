@@ -97,6 +97,7 @@ class FrankaInterface:
         self._gripper_sub_port = general_cfg.NUC.GRIPPER_PUB_PORT
 
         self._init_q = np.array(general_cfg.ROBOT.INIT_Q, dtype='float32') if 'INIT_Q' in general_cfg.ROBOT else None
+        self._calibration_q = np.array(general_cfg.ROBOT.CALIBRATION_Q, dtype='float32') if 'CALIBRATION_Q' in general_cfg.ROBOT else None
         self._gripper_camera = general_cfg.ROBOT.GRIPPER_CAMERA if 'GRIPPER_CAMERA' in general_cfg.ROBOT else None
 
         self._context = zmq.Context()
@@ -175,6 +176,10 @@ class FrankaInterface:
     @property
     def init_q(self):
         return self._init_q
+
+    @property
+    def calibration_q(self):
+        return self._calibration_q
 
     @property
     def gripper_camera(self):
@@ -509,6 +514,14 @@ class FrankaInterface:
             joint_impedance_msg.kp[:] = controller_cfg.joint_kp
             joint_impedance_msg.kd[:] = controller_cfg.joint_kd
             joint_impedance_msg.joint_tau_limits[:] = controller_cfg.joint_tau_limits
+
+            joint_impedance_config = franka_controller_pb2.FrankaJointImpedanceConfig()
+            joint_impedance_config.enable_residual_tau = controller_cfg.get('enable_residual_tau', False)
+            if joint_impedance_config.enable_residual_tau:
+                joint_impedance_config.residual_tau_translation_vec[:] = controller_cfg.residual_tau_translation_vec
+                joint_impedance_config.residual_tau_rotation_vec[:] = controller_cfg.residual_tau_rotation_vec
+
+            joint_impedance_msg.config.CopyFrom(joint_impedance_config)
 
             control_msg = franka_controller_pb2.FrankaControlMessage()
             control_msg.controller_type = (
