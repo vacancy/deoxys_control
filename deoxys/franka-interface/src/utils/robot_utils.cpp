@@ -83,8 +83,20 @@ void FrankaRobotStateUtils::LoadErrorStateToMsg(
 }
 
 void FrankaRobotStateUtils::LoadRobotStateToMsg(
-    const franka::RobotState &robot_state,
+    const StatePublisherInternalState &state,
     FrankaRobotStateMessage &robot_state_msg) {
+
+  const auto &robot_state = state.robot_state;
+
+  robot_state_msg.mutable_generalized_gravity()->Add(
+    state.generalized_gravity.begin(), state.generalized_gravity.end()
+  );
+  robot_state_msg.mutable_generalized_coriolis()->Add(
+    state.generalized_coriolis.begin(), state.generalized_coriolis.end()
+  );
+  robot_state_msg.mutable_jacobian_t_ee()->Add(
+    state.jacobian.begin(), state.jacobian.end()
+  );
 
   robot_state_msg.mutable_o_t_ee()->Add(robot_state.O_T_EE.begin(),
                                         robot_state.O_T_EE.end());
@@ -255,17 +267,16 @@ void StatePublisher::StartPublishing() {
   state_pub_thread_ = std::thread([&]() {
     int count = 0;
     while (running_) {
-      franka::RobotState current_robot_state;
+      StatePublisherInternalState current_robot_state;
 
-      if (state_.mutex.try_lock()) {
-        current_robot_state = state_.robot_state;
-        state_.mutex.unlock();
+      if (mutex_.try_lock()) {
+        current_robot_state = state_;
+        mutex_.unlock();
       } else {
         continue;
       }
       FrankaRobotStateMessage robot_state_msg;
-      robot_state_utils_.LoadRobotStateToMsg(current_robot_state,
-                                             robot_state_msg);
+      robot_state_utils_.LoadRobotStateToMsg(current_robot_state, robot_state_msg);
       robot_state_msg.set_frame(count);
       count++;
       std::string msg_str;
@@ -285,7 +296,7 @@ void StatePublisher::StopPublishing() {
 
 void StatePublisher::UpdateNewState(const franka::RobotState &robot_state,
                                     const franka::Model *robot_model) {
-  if (state_.mutex.try_lock()) {
+  if (mutex_.try_lock()) {
     state_.robot_state = robot_state;
     int n_frame = 0;
     for (franka::Frame frame = franka::Frame::kJoint1;
@@ -296,7 +307,10 @@ void StatePublisher::UpdateNewState(const franka::RobotState &robot_state,
       }
       n_frame++;
     }
-    state_.mutex.unlock();
+    state_.generalized_gravity = robot_model->gravity(robot_state);
+    state_.generalized_coriolis = robot_model->coriolis(robot_state);
+    state_.jacobian = robot_model->zeroJacobian(franka::Frame::kEndEffector, robot_state);
+    mutex_.unlock();
   }
 }
 

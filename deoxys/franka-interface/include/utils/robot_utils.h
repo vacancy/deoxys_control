@@ -18,13 +18,21 @@
 
 namespace robot_utils {
 
+struct StatePublisherInternalState {
+    franka::RobotState robot_state;
+    std::array<double, 144> current_robot_frames;
+    std::array<double, 7> generalized_gravity;
+    std::array<double, 7> generalized_coriolis;
+    std::array<double, 42> jacobian;
+};
+
 class FrankaRobotStateUtils {
 public:
   FrankaRobotStateUtils(){};
   ~FrankaRobotStateUtils(){};
   void LoadErrorStateToMsg(const franka::Errors &,
                            FrankaRobotStateMessage::Errors &);
-  void LoadRobotStateToMsg(const franka::RobotState &,
+  void LoadRobotStateToMsg(const StatePublisherInternalState &,
                            FrankaRobotStateMessage &);
 };
 
@@ -42,12 +50,9 @@ class StatePublisher {
 protected:
   std::thread state_pub_thread_;
   robot_utils::FrankaRobotStateUtils robot_state_utils_;
-  struct {
-    franka::RobotState robot_state;
-    std::array<double, 144> current_robot_frames;
-    std::mutex mutex;
-  } state_;
+  StatePublisherInternalState state_;
   zmq_utils::ZMQPublisher zmq_publisher_;
+  std::mutex mutex_;
   int state_pub_rate_;
   bool running_;
 

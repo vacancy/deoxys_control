@@ -54,6 +54,9 @@ message FrankaRobotStateMessage {
   repeated double O_ddP_EE_c = 39;
   repeated double theta = 40;
   repeated double dtheta = 41;
+  repeated double generalized_gravity = 42;
+  repeated double generalized_coriolis = 43;
+  repeated double jacobian_T_EE = 44;
 
   message Errors {
     bool joint_position_limits_violation = 1;
@@ -95,10 +98,10 @@ message FrankaRobotStateMessage {
     bool joint_move_in_wrong_direction = 37;
   }
 
-  Errors current_errors = 42;
-  Errors last_motion_errors = 43;
+  Errors current_errors = 45;
+  Errors last_motion_errors = 46;
 
-  double control_command_success_rate = 44;
+  double control_command_success_rate = 47;
 
   enum RobotMode {
     Other = 0;
@@ -110,15 +113,15 @@ message FrankaRobotStateMessage {
     AutomaticErrorRecovery = 6;
   }
 
-  RobotMode robot_mode = 45;
+  RobotMode robot_mode = 48;
   message Duration {
     double toSec = 1;
     uint64 toMSec = 2;
   }
 
-  Duration time = 46;
+  Duration time = 49;
 
-  repeated double current_robot_poses_frames = 47;
+  repeated double current_robot_poses_frames = 50;
 
-  uint64 frame = 48;
+  uint64 frame = 51;
 }
