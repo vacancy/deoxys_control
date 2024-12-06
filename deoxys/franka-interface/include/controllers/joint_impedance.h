@@ -18,6 +18,10 @@ protected:
   Eigen::Array<double, 7, 1> joint_min_;
   Eigen::Array<double, 7, 1> joint_tau_limits_;
 
+  bool enable_residual_tau_ = false;
+  Eigen::Matrix<double, 3, 1> residual_tau_translation_vec_;
+  Eigen::Matrix<double, 3, 1> residual_tau_rotation_vec_;
+
   // Eigen::Matrix<double, 7, 1> smooth_current_q_;
   // Eigen::Matrix<double, 7, 1> smooth_prev_q_;
   // Eigen::Matrix<double, 7, 1> smooth_current_dq_;

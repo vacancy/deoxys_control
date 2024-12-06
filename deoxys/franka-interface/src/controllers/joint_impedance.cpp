@@ -47,6 +47,15 @@ bool JointImpedanceController::ParseMessage(const FrankaControlMessage &msg) {
   ParseMessageArray<double, 7>(control_msg_.kd(), Kd);
   ParseMessageArray<double, 7>(control_msg_.joint_tau_limits(), joint_tau_limits_);
 
+  enable_residual_tau_ = control_msg_.config().enable_residual_tau();
+  if (enable_residual_tau_) {
+    ParseMessageArray<double, 3>(control_msg_.config().residual_tau_translation_vec(), residual_tau_translation_vec_);
+    ParseMessageArray<double, 3>(control_msg_.config().residual_tau_rotation_vec(), residual_tau_rotation_vec_);
+  } else {
+    residual_tau_translation_vec_ << 0., 0., 0.;
+    residual_tau_rotation_vec_ << 0., 0., 0.;
+  }
+
   this->state_estimator_ptr_->ParseMessage(msg.state_estimator_msg());
   return true;
 }
@@ -115,6 +124,20 @@ JointImpedanceController::Step(const franka::RobotState &robot_state,
   tau_d << Kp.cwiseProduct(joint_pos_error) - Kd.cwiseProduct(current_dq);
   // joint_pos_error << desired_q_ - q;
   // tau_d << Kp.cwiseProduct(joint_pos_error) - Kd.cwiseProduct(dq);
+
+  if (enable_residual_tau_) {
+    std::array<double, 42> jacobian_array = model_->zeroJacobian(franka::Frame::kEndEffector, robot_state);
+    Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
+
+    Eigen::MatrixXd jacobian_pos(3, 7);
+    Eigen::MatrixXd jacobian_ori(3, 7);
+    jacobian_pos << jacobian.block(0, 0, 3, 7);
+    jacobian_ori << jacobian.block(3, 0, 3, 7);
+
+    // std::cerr << "Addtional tau (pos): " << jacobian_pos.transpose() * residual_tau_translation_vec_.transpose() << std::endl;
+    // std::cerr << "Addtional tau (rot): " << jacobian_ori.transpose() * residual_tau_rotation_vec_.transpose() << std::endl;
+    tau_d << tau_d + jacobian_pos.transpose() * residual_tau_translation_vec_ + jacobian_ori.transpose() * residual_tau_rotation_vec_;
+  }
 
   if (getGlobalHandler()->log_controller) {
     std::cout << "JI::q: " << q.transpose() << std::endl;
