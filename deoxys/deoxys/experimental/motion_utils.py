@@ -25,9 +25,9 @@ def _canonicalize_gripper_open_close(gripper_open, gripper_close, default='close
     if gripper_open is not None and gripper_close is not None:
         raise ValueError("Cannot specify both gripper_open and gripper_close")
     if gripper_open is None:
-        gripper_open = not gripper_close
+        gripper_open = not gripper_close if type(gripper_close) is bool else ~gripper_close
     if gripper_close is None:
-        gripper_close = not gripper_open
+        gripper_close = not gripper_open if type(gripper_open) is bool else ~gripper_open
     return gripper_open, gripper_close
 
 
@@ -36,7 +36,7 @@ def reset_joints_to_v1(
     start_joint_pos: Union[list, np.ndarray],
     controller_cfg: Optional[dict] = None,
     timeout: int = 7,
-    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None
+    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None, gripper_default: str = 'close'
 ):
     """
     Resets the robot's joints to the specified joint positions.
@@ -48,6 +48,7 @@ def reset_joints_to_v1(
         timeout (int, optional): The timeout for the reset operation. Defaults to 7.
         gripper_open (Optional[bool], optional): Whether to open the gripper. Defaults to False. You should specify one of gripper_open and gripper_close.
         gripper_close (Optional[bool], optional): Whether to close the gripper. Defaults to True. You should specify one of gripper_open and gripper_close.
+        gripper_default (str, optional): The default gripper action. Defaults to 'close'.
 
     Raises:
         ValueError: If both gripper_open and gripper_close are specified.
@@ -98,10 +99,11 @@ def reset_joints_to_v2(
     robot_interface: FrankaInterface,
     desired_joint_pos: Union[list, np.ndarray],
     controller_cfg: Optional[dict] = None,
-    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None,
-    timeout: float = 20, fps: int = 20, max_rad_per_second: float = np.pi / 8
+    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None, gripper_default: str = 'close',
+    timeout: float = 20, fps: int = 20, max_rad_per_second: float = np.pi / 8,
+    skip_goal_reached_check: bool = False
 ):
-    gripper_open, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default='close')
+    gripper_open, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default=gripper_default)
 
     robot_interface.wait_for_state()
     if controller_cfg is None:
@@ -131,8 +133,10 @@ def reset_joints_to_v2(
 
     if np.max(np.abs(np.array(robot_interface.last_q) - np.array(desired_joint_pos))) < 1e-3:
         return True
-    if np.max(np.abs(np.array(robot_interface.last_q) - np.array(desired_joint_pos))) > 0.1:
-        raise RuntimeError("Failed to reach the desired joint position")
+    if not skip_goal_reached_check:
+        if np.max(np.abs(np.array(robot_interface.last_q) - np.array(desired_joint_pos))) > 0.1:
+            print(np.array(robot_interface.last_q), np.array(desired_joint_pos))
+            raise RuntimeError("Failed to reach the desired joint position")
 
     reset_joints_to_v1(robot_interface, desired_joint_pos, controller_cfg=None, gripper_open=gripper_open, timeout=1.0)
     return True
@@ -228,7 +232,7 @@ def follow_joint_traj(
     joint_traj: list,
     num_addition_steps: int = 30,
     controller_cfg: Optional[dict] = None,
-    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None
+    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None, gripper_default: str = 'close'
 ):
     """This is a simple function to follow a given trajectory in joint space.
 
@@ -239,11 +243,13 @@ def follow_joint_traj(
         controller_cfg (dict, optional): controller configurations. Defaults to None.
         gripper_open (bool, optional): whether to open the gripper. Defaults to False. You should specify one of gripper_open and gripper_close.
         gripper_close (bool, optional): whether to close the gripper. Defaults to True. You should specify one of gripper_open and gripper_close.
+        gripper_default (str, optional): the default gripper action. Defaults to 'close'.
 
     Returns:
         joint_pos_history (list): a list of recorded joint positions
         action_history (list): a list of recorded action commands
     """
+    gripper_open, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default=gripper_default)
 
     if controller_cfg is None:
         controller_cfg = get_default_controller_config(
@@ -256,6 +262,9 @@ def follow_joint_traj(
         )
         controller_cfg = verify_controller_config(controller_cfg)
 
+    # controller_cfg['enable_residual_tau'] = True
+    # controller_cfg['residual_tau_translation_vec'] = [0, 0, -1.5]
+
     prev_action = np.array([0.0] * 8)
     joint_pos_history = []
     action_history = []
@@ -265,17 +274,22 @@ def follow_joint_traj(
         and robot_interface.check_nonzero_configuration()
     )
 
-    for target_joint_pos in joint_traj:
+    if type(gripper_close) is not bool:
+        gripper_close_list = gripper_close
+    else:
+        gripper_close_list = [gripper_close for _ in joint_traj]
+
+    for target_joint_pos, gripper_close in zip(joint_traj, gripper_close_list):
         assert len(target_joint_pos) >= 7
         if type(target_joint_pos) is np.ndarray:
             action = target_joint_pos.tolist()
         else:
             action = target_joint_pos
         if len(action) == 7:
-            if gripper_close:
-                action = action + [1.0]
-            else:
+            if gripper_open:
                 action = action + [-1.0]
+            else:
+                action = action + [1.0]
         current_joint_pos = np.array(robot_interface.last_q)
         robot_interface.control(
             controller_type="JOINT_IMPEDANCE",
@@ -302,11 +316,11 @@ def follow_joint_traj(
 
 def follow_ee_traj(
     robot_interface: FrankaInterface,
-    ee_traj: list[tuple[np.ndarray, np.ndarray]],
+    ee_traj: list[tuple[np.ndarray, np.ndarray] | tuple[np.ndarray, np.ndarray, float]],
     compliance_traj: Optional[list] = None, *,
     follow_position_only: bool = False,
     controller_cfg: Optional[dict] = None,
-    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None,
+    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None, gripper_default: str = 'close'
 ) -> tuple[list, list]:
     """This is a simple function to follow a given trajectory in end-effector space.
 
@@ -318,6 +332,7 @@ def follow_ee_traj(
         controller_cfg: the controller configuration.
         gripper_open: whether to open the gripper. Defaults to False. You should specify one of gripper_open and gripper_close.
         gripper_close: whether to close the gripper. Defaults to True. You should specify one of gripper_open and gripper_close.
+        gripper_default: the default gripper action. Defaults to 'close'.
 
     Returns:
         ee_pose_history: a list of recorded end effector poses.
@@ -326,7 +341,7 @@ def follow_ee_traj(
     Raises:
         AssertionError: if the controller type is not OSC_POSE.
     """
-    gripper_open, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default='close')
+    gripper_open, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default=gripper_default)
 
     if controller_cfg is None:
         controller_cfg = get_default_controller_config(controller_type="OSC_POSE")
@@ -336,6 +351,8 @@ def follow_ee_traj(
             + controller_cfg["controller_type"]
         )
         controller_cfg = verify_controller_config(controller_cfg)
+
+    controller_cfg['is_delta'] = False
 
     if compliance_traj is None:
         assert len(ee_traj) == len(compliance_traj)
@@ -349,16 +366,20 @@ def follow_ee_traj(
     action_history = []
 
     for i, ee_pose in enumerate(ee_traj):
-        target_pos, target_rot = ee_pose
+        target_pos, target_rot = ee_pose[:2]
         if follow_position_only:
             target_rot = current_ee_quat
         target_axis_angle = transform_utils.quat2axisangle(target_rot)
 
         action = np.concatenate([target_pos, target_axis_angle])
-        if gripper_open:
-            action = np.concatenate([action, [-1.0]])
+
+        if len(ee_pose) == 3:
+            action = np.concatenate([action, [ee_pose[2]]])
         else:
-            action = np.concatenate([action, [1.0]])
+            if gripper_open:
+                action = np.concatenate([action, [-1.0]])
+            else:
+                action = np.concatenate([action, [1.0]])
 
         if compliance_traj is not None:
             controller_cfg = deepcopy(controller_cfg)
