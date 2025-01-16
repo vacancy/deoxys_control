@@ -25,9 +25,9 @@ def _canonicalize_gripper_open_close(gripper_open, gripper_close, default='close
     if gripper_open is not None and gripper_close is not None:
         raise ValueError("Cannot specify both gripper_open and gripper_close")
     if gripper_open is None:
-        gripper_open = not gripper_close if type(gripper_close) is bool else ~gripper_close
+        gripper_open = not gripper_close if type(gripper_close) is bool else [not g for g in gripper_close]
     if gripper_close is None:
-        gripper_close = not gripper_open if type(gripper_open) is bool else ~gripper_open
+        gripper_close = not gripper_open if type(gripper_open) is bool else [not g for g in gripper_open]
     return gripper_open, gripper_close
 
 
@@ -232,7 +232,7 @@ def follow_joint_traj(
     joint_traj: list,
     num_addition_steps: int = 30,
     controller_cfg: Optional[dict] = None,
-    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None, gripper_default: str = 'close'
+    gripper_open: Optional[Union[bool, list]] = None, gripper_close: Optional[Union[bool,list]] = None, gripper_default: str = 'close'
 ):
     """This is a simple function to follow a given trajectory in joint space.
 
@@ -249,7 +249,7 @@ def follow_joint_traj(
         joint_pos_history (list): a list of recorded joint positions
         action_history (list): a list of recorded action commands
     """
-    gripper_open, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default=gripper_default)
+    _, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default=gripper_default)
 
     if controller_cfg is None:
         controller_cfg = get_default_controller_config(
@@ -279,17 +279,17 @@ def follow_joint_traj(
     else:
         gripper_close_list = [gripper_close for _ in joint_traj]
 
-    for target_joint_pos, gripper_close in zip(joint_traj, gripper_close_list):
+    for target_joint_pos, gripper_close_step_i in zip(joint_traj, gripper_close_list):
         assert len(target_joint_pos) >= 7
         if type(target_joint_pos) is np.ndarray:
             action = target_joint_pos.tolist()
         else:
             action = target_joint_pos
         if len(action) == 7:
-            if gripper_open:
-                action = action + [-1.0]
+            if gripper_close_step_i:
+                action = tuple(action) + (1.0, )
             else:
-                action = action + [1.0]
+                action = tuple(action) + (-1.0,)
         current_joint_pos = np.array(robot_interface.last_q)
         robot_interface.control(
             controller_type="JOINT_IMPEDANCE",
@@ -320,7 +320,7 @@ def follow_ee_traj(
     compliance_traj: Optional[list] = None, *,
     follow_position_only: bool = False,
     controller_cfg: Optional[dict] = None,
-    gripper_open: Optional[bool] = None, gripper_close: Optional[bool] = None, gripper_default: str = 'close'
+    gripper_open: Optional[Union[bool, list]] = None, gripper_close: Optional[Union[bool, list]] = None, gripper_default: str = 'close'
 ) -> tuple[list, list]:
     """This is a simple function to follow a given trajectory in end-effector space.
 
@@ -341,7 +341,7 @@ def follow_ee_traj(
     Raises:
         AssertionError: if the controller type is not OSC_POSE.
     """
-    gripper_open, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default=gripper_default)
+    _, gripper_close = _canonicalize_gripper_open_close(gripper_open, gripper_close, default=gripper_default)
 
     if controller_cfg is None:
         controller_cfg = get_default_controller_config(controller_type="OSC_POSE")
@@ -354,7 +354,7 @@ def follow_ee_traj(
 
     controller_cfg['is_delta'] = False
 
-    if compliance_traj is None:
+    if compliance_traj is not None:
         assert len(ee_traj) == len(compliance_traj)
 
     robot_interface.wait_for_state()
@@ -365,7 +365,12 @@ def follow_ee_traj(
     ee_pose_history = []
     action_history = []
 
-    for i, ee_pose in enumerate(ee_traj):
+    if type(gripper_close) is not bool:
+        gripper_close_list = gripper_close
+    else:
+        gripper_close_list = [gripper_close for _ in ee_traj]
+
+    for i, (ee_pose, gripper_close_step_i) in enumerate(zip(ee_traj, gripper_close_list)):
         target_pos, target_rot = ee_pose[:2]
         if follow_position_only:
             target_rot = current_ee_quat
@@ -376,10 +381,10 @@ def follow_ee_traj(
         if len(ee_pose) == 3:
             action = np.concatenate([action, [ee_pose[2]]])
         else:
-            if gripper_open:
-                action = np.concatenate([action, [-1.0]])
-            else:
+            if gripper_close_step_i:
                 action = np.concatenate([action, [1.0]])
+            else:
+                action = np.concatenate([action, [-1.0]])
 
         if compliance_traj is not None:
             controller_cfg = deepcopy(controller_cfg)
