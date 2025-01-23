@@ -334,6 +334,23 @@ class FrankaInterface:
             else:
                 osc_config.residual_tau_rotation_vec[:] = [0.0, 0.0, 0.0]
 
+            # bool use_diff_ik = 9;
+            # repeated double diff_ik_kp = 10;
+            # repeated double diff_ik_kd = 11;
+            if 'use_diff_ik' in controller_cfg:
+                osc_config.use_diff_ik = controller_cfg.use_diff_ik
+
+                if controller_cfg.use_diff_ik:
+                    osc_config.diff_ik_kp[:] = controller_cfg.diff_ik_kp
+                    osc_config.diff_ik_kd[:] = controller_cfg.diff_ik_kd
+                else:
+                    osc_config.diff_ik_kp[:] = [0.0] * 7
+                    osc_config.diff_ik_kd[:] = [0.0] * 7
+            else:
+                osc_config.use_diff_ik = False
+                osc_config.diff_ik_kp[:] = [0.0] * 7
+                osc_config.diff_ik_kd[:] = [0.0] * 7
+
             osc_config.coriolis_stiffness = controller_cfg.get('coriolis_stiffness', 0.0)
             osc_config.nullspace_stiffness = controller_cfg.nullspace_stiffness
             osc_config.nullspace_static_q[:] = controller_cfg.nullspace_static_q

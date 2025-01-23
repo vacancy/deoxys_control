@@ -22,8 +22,12 @@ protected:
   Eigen::Array<double, 7, 1> joint_min_;
   Eigen::Array<double, 7, 1> avoidance_weights_;
   Eigen::Array<double, 7, 1> joint_tau_limits_;
+
+  Eigen::Matrix<double, 7, 1> diff_ik_kp_, diff_ik_kd_;
+
   double coriolis_stiffness_;
   double nullspace_stiffness_;
+  bool use_diff_ik_;
 
 public:
   OSCImpedanceController();

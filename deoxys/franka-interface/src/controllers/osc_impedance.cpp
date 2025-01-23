@@ -83,9 +83,12 @@ bool OSCImpedanceController::ParseMessage(const FrankaControlMessage &msg) {
   ParseMessageArray<double, 7>(control_msg_.config().joint_limits_avoidance(), avoidance_weights_);
   ParseMessageArray<double, 7>(control_msg_.config().nullspace_static_q(), static_q_task_);
   ParseMessageArray<double, 7>(control_msg_.config().joint_tau_limits(), joint_tau_limits_);
+  ParseMessageArray<double, 7>(control_msg_.config().diff_ik_kp(), diff_ik_kp_);
+  ParseMessageArray<double, 7>(control_msg_.config().diff_ik_kd(), diff_ik_kd_);
 
   nullspace_stiffness_ = control_msg_.config().nullspace_stiffness();
   coriolis_stiffness_ = control_msg_.config().coriolis_stiffness();
+  use_diff_ik_ = control_msg_.config().use_diff_ik();
 
   // std::cout << "OSC joint tau limits: " << joint_tau_limits_.transpose() << std::endl;
   // std::cout << "OSC nullspace stiffness: " << nullspace_stiffness_ << std::endl;
@@ -135,8 +138,6 @@ std::array<double, 7> OSCImpedanceController::Step(
   std::chrono::high_resolution_clock::time_point t1 =
       std::chrono::high_resolution_clock::now();
 
-  Eigen::Matrix<double, 7, 1> tau_d;
-
   std::array<double, 49> mass_array = model_->mass(robot_state);
   Eigen::Map<Eigen::Matrix<double, 7, 7>> M(mass_array.data());
 
@@ -149,18 +150,8 @@ std::array<double, 7> OSCImpedanceController::Step(
   std::array<double, 7> gravity_array = model_->gravity(robot_state);
   Eigen::Map<const Eigen::Matrix<double, 7, 1>> gravity(gravity_array.data());
 
-  std::array<double, 42> jacobian_array =
-      model_->zeroJacobian(franka::Frame::kEndEffector, robot_state);
-  Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-
-  Eigen::MatrixXd jacobian_pos(3, 7);
-  Eigen::MatrixXd jacobian_ori(3, 7);
-  jacobian_pos << jacobian.block(0, 0, 3, 7);
-  jacobian_ori << jacobian.block(3, 0, 3, 7);
-
   // End effector pose in base frame
-  Eigen::Affine3d T_EE_in_base_frame(
-      Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
+  Eigen::Affine3d T_EE_in_base_frame(Eigen::Matrix4d::Map(robot_state.O_T_EE.data()));
   Eigen::Vector3d pos_EE_in_base_frame(T_EE_in_base_frame.translation());
   Eigen::Quaterniond quat_EE_in_base_frame(T_EE_in_base_frame.linear());
 
@@ -172,11 +163,9 @@ std::array<double, 7> OSCImpedanceController::Step(
 
   // Update the specified state estimator
   if (this->state_estimator_ptr_->IsFirstState()) {
-    this->state_estimator_ptr_->Initialize(q, dq, pos_EE_in_base_frame,
-                                           quat_EE_in_base_frame);
+    this->state_estimator_ptr_->Initialize(q, dq, pos_EE_in_base_frame, quat_EE_in_base_frame);
   } else {
-    this->state_estimator_ptr_->Update(q, dq, pos_EE_in_base_frame,
-                                       quat_EE_in_base_frame);
+    this->state_estimator_ptr_->Update(q, dq, pos_EE_in_base_frame, quat_EE_in_base_frame);
   }
 
   Eigen::Matrix<double, 7, 1> current_q, current_dq;
@@ -188,56 +177,89 @@ std::array<double, 7> OSCImpedanceController::Step(
   pos_EE_in_base_frame = this->state_estimator_ptr_->GetCurrentEEFPos();
   quat_EE_in_base_frame = this->state_estimator_ptr_->GetCurrentEEFQuat();
 
-  if (desired_quat_EE_in_base_frame.coeffs().dot(
-          quat_EE_in_base_frame.coeffs()) < 0.0) {
+  if (desired_quat_EE_in_base_frame.coeffs().dot(quat_EE_in_base_frame.coeffs()) < 0.0) {
     quat_EE_in_base_frame.coeffs() << -quat_EE_in_base_frame.coeffs();
   }
 
-  Eigen::Vector3d pos_error;
+  Eigen::Matrix<double, 7, 1> tau_d;
 
-  pos_error << desired_pos_EE_in_base_frame - pos_EE_in_base_frame;
-  Eigen::Quaterniond quat_error(desired_quat_EE_in_base_frame.inverse() *
-                                quat_EE_in_base_frame);
-  Eigen::Vector3d ori_error;
-  ori_error << quat_error.x(), quat_error.y(), quat_error.z();
-  ori_error << -T_EE_in_base_frame.linear() * ori_error;
+  if (not use_diff_ik_) {
+    Eigen::Vector3d pos_error;
+    pos_error << desired_pos_EE_in_base_frame - pos_EE_in_base_frame;
+    Eigen::Quaterniond quat_error(desired_quat_EE_in_base_frame.inverse() * quat_EE_in_base_frame);
+    Eigen::Vector3d ori_error;
+    ori_error << quat_error.x(), quat_error.y(), quat_error.z();
+    ori_error << -T_EE_in_base_frame.linear() * ori_error;
 
-  // Compute matrices
-  Eigen::Matrix<double, 7, 7> M_inv(M.inverse());
-  Eigen::MatrixXd Lambda_inv(6, 6);
-  Lambda_inv << jacobian * M_inv * jacobian.transpose();
-  Eigen::MatrixXd Lambda(6, 6);
-  control_utils::PInverse(Lambda_inv, Lambda);
+    std::array<double, 42> jacobian_array = model_->zeroJacobian(franka::Frame::kEndEffector, robot_state);
+    Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
 
-  Eigen::Matrix<double, 7, 6> J_inv;
-  J_inv << M_inv * jacobian.transpose() * Lambda;
-  Eigen::Matrix<double, 7, 7> Nullspace;
-  Nullspace << Eigen::MatrixXd::Identity(7, 7) -
-                   jacobian.transpose() * J_inv.transpose();
+    Eigen::MatrixXd jacobian_pos(3, 7);
+    Eigen::MatrixXd jacobian_ori(3, 7);
+    jacobian_pos << jacobian.block(0, 0, 3, 7);
+    jacobian_ori << jacobian.block(3, 0, 3, 7);
 
-  // Decoupled mass matrices
-  Eigen::MatrixXd Lambda_pos_inv(3, 3);
-  Lambda_pos_inv << jacobian_pos * M_inv * jacobian_pos.transpose();
-  Eigen::MatrixXd Lambda_ori_inv(3, 3);
-  Lambda_ori_inv << jacobian_ori * M_inv * jacobian_ori.transpose();
+    // Compute matrices
+    Eigen::Matrix<double, 7, 7> M_inv(M.inverse());
+    Eigen::MatrixXd Lambda_inv(6, 6);
+    Lambda_inv << jacobian * M_inv * jacobian.transpose();
+    Eigen::MatrixXd Lambda(6, 6);
+    control_utils::PInverse(Lambda_inv, Lambda);
 
-  Eigen::MatrixXd Lambda_pos(3, 3);
-  Eigen::MatrixXd Lambda_ori(3, 3);
-  control_utils::PInverse(Lambda_pos_inv, Lambda_pos);
-  control_utils::PInverse(Lambda_ori_inv, Lambda_ori);
+    Eigen::Matrix<double, 7, 6> J_inv;
+    J_inv << M_inv * jacobian.transpose() * Lambda;
+    Eigen::Matrix<double, 7, 7> Nullspace;
+    Nullspace << Eigen::MatrixXd::Identity(7, 7) - jacobian.transpose() * J_inv.transpose();
 
-  pos_error = pos_error.unaryExpr([](double x) { return (abs(x) < 1e-4) ? 0. : x; });
-  ori_error = ori_error.unaryExpr([](double x) { return (abs(x) < 5e-3) ? 0. : x; });
+    // Decoupled mass matrices
+    Eigen::MatrixXd Lambda_pos_inv(3, 3);
+    Lambda_pos_inv << jacobian_pos * M_inv * jacobian_pos.transpose();
+    Eigen::MatrixXd Lambda_ori_inv(3, 3);
+    Lambda_ori_inv << jacobian_ori * M_inv * jacobian_ori.transpose();
 
-  // std::cout << "OSC::pos_error " << pos_error.transpose() << std::endl;
-  // std::cout << "OSC::ori_error " << ori_error.transpose() << std::endl;
+    Eigen::MatrixXd Lambda_pos(3, 3);
+    Eigen::MatrixXd Lambda_ori(3, 3);
+    control_utils::PInverse(Lambda_pos_inv, Lambda_pos);
+    control_utils::PInverse(Lambda_ori_inv, Lambda_ori);
 
-  tau_d << jacobian_pos.transpose() * (Lambda_pos * (Kp_p * pos_error - Kd_p * (jacobian_pos * current_dq))) +
-           jacobian_ori.transpose() * (Lambda_ori * (Kp_r * ori_error - Kd_r * (jacobian_ori * current_dq)));
+    pos_error = pos_error.unaryExpr([](double x) { return (abs(x) < 1e-4) ? 0. : x; });
+    ori_error = ori_error.unaryExpr([](double x) { return (abs(x) < 5e-3) ? 0. : x; });
 
-  // std::cout << "res_tau_T = " << residual_tau_translation_vec_.transpose() << std::endl;
-  // std::cout << "res_tau_R = " << residual_tau_rotation_vec_.transpose() << std::endl;
-  tau_d << tau_d + jacobian_pos.transpose() * residual_tau_translation_vec_ + jacobian_ori.transpose() * residual_tau_rotation_vec_;
+    // std::cout << "OSC::pos_error " << pos_error.transpose() << std::endl;
+    // std::cout << "OSC::ori_error " << ori_error.transpose() << std::endl;
+
+    tau_d << jacobian_pos.transpose() * (Lambda_pos * (Kp_p * pos_error - Kd_p * (jacobian_pos * current_dq))) +
+             jacobian_ori.transpose() * (Lambda_ori * (Kp_r * ori_error - Kd_r * (jacobian_ori * current_dq)));
+
+    // std::cout << "res_tau_T = " << residual_tau_translation_vec_.transpose() << std::endl;
+    // std::cout << "res_tau_R = " << residual_tau_rotation_vec_.transpose() << std::endl;
+    tau_d << tau_d + jacobian_pos.transpose() * residual_tau_translation_vec_ + jacobian_ori.transpose() * residual_tau_rotation_vec_;
+  } else {  // if (use_diff_ik_)
+    Eigen::Vector3d pos_error;
+    Eigen::Quaterniond quat_error(desired_quat_EE_in_base_frame.inverse() * quat_EE_in_base_frame);
+    Eigen::Vector3d ori_error;
+    Eigen::Matrix<double, 7, 1> best_q;
+    double best_cost = 1e6;
+
+    pos_error << desired_pos_EE_in_base_frame - pos_EE_in_base_frame;
+    ori_error << quat_error.x(), quat_error.y(), quat_error.z();
+    ori_error << -T_EE_in_base_frame.linear() * ori_error;
+
+    pos_error = pos_error.unaryExpr([](double x) { return (abs(x) < 1e-4) ? 0. : x; });
+    ori_error = ori_error.unaryExpr([](double x) { return (abs(x) < 5e-3) ? 0. : x; });
+
+    std::array<double, 42> jacobian_array = model_->zeroJacobian(franka::Frame::kEndEffector, robot_state);
+    Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
+    Eigen::Matrix<double, 7, 6>> jacobian_pinverse;
+    jacobian_pinverse = jacobian.transpose() * (jacobian * jacobian.transpose()).inverse();
+    Eigen::Matrix<double, 6, 1> error;
+    error << pos_error, ori_error;
+
+    Eigen::Matrix<double, 7, 1> desired_q;
+    desired_q << current_q + jacobian_pinverse * error;
+
+    tau_d << diff_ik_kp_.cwiseProduct(desired_q - current_q) - diff_ik_kd_.cwiseProduct(current_dq);
+  } // end if (use_diff_ik_)
 
   if (getGlobalHandler()->log_controller) {
     std::cout << "OSC::q: " << q.transpose() << std::endl;
@@ -300,8 +322,7 @@ std::array<double, 7> OSCImpedanceController::Step(
   std::array<double, 7> tau_d_array{};
   Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_d;
 
-  std::chrono::high_resolution_clock::time_point t2 =
-      std::chrono::high_resolution_clock::now();
+  std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
   auto time = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
   // std::cout << "OSC step took: " << time.count() << " ms"  << std::endl;
   return tau_d_array;

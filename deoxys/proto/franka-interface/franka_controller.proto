@@ -57,6 +57,9 @@ message FrankaOSCControllerConfig {
   repeated double nullspace_static_q = 6;
   repeated double joint_limits_avoidance = 7;
   repeated double joint_tau_limits = 8;
+  bool use_diff_ik = 9;
+  repeated double diff_ik_kp = 10;
+  repeated double diff_ik_kd = 11;
 }
 
 message FrankaJointImpedanceConfig {
