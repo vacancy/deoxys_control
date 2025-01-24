@@ -181,6 +181,21 @@ std::array<double, 7> OSCImpedanceController::Step(
     quat_EE_in_base_frame.coeffs() << -quat_EE_in_base_frame.coeffs();
   }
 
+  std::array<double, 42> jacobian_array = model_->zeroJacobian(franka::Frame::kEndEffector, robot_state);
+  Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
+
+  // Compute matrices
+  Eigen::Matrix<double, 7, 7> M_inv(M.inverse());
+  Eigen::MatrixXd Lambda_inv(6, 6);
+  Lambda_inv << jacobian * M_inv * jacobian.transpose();
+  Eigen::MatrixXd Lambda(6, 6);
+  control_utils::PInverse(Lambda_inv, Lambda);
+
+  Eigen::Matrix<double, 7, 6> J_inv;
+  J_inv << M_inv * jacobian.transpose() * Lambda;
+  Eigen::Matrix<double, 7, 7> Nullspace;
+  Nullspace << Eigen::MatrixXd::Identity(7, 7) - jacobian.transpose() * J_inv.transpose();
+
   Eigen::Matrix<double, 7, 1> tau_d;
 
   if (not use_diff_ik_) {
@@ -191,25 +206,10 @@ std::array<double, 7> OSCImpedanceController::Step(
     ori_error << quat_error.x(), quat_error.y(), quat_error.z();
     ori_error << -T_EE_in_base_frame.linear() * ori_error;
 
-    std::array<double, 42> jacobian_array = model_->zeroJacobian(franka::Frame::kEndEffector, robot_state);
-    Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-
     Eigen::MatrixXd jacobian_pos(3, 7);
     Eigen::MatrixXd jacobian_ori(3, 7);
     jacobian_pos << jacobian.block(0, 0, 3, 7);
     jacobian_ori << jacobian.block(3, 0, 3, 7);
-
-    // Compute matrices
-    Eigen::Matrix<double, 7, 7> M_inv(M.inverse());
-    Eigen::MatrixXd Lambda_inv(6, 6);
-    Lambda_inv << jacobian * M_inv * jacobian.transpose();
-    Eigen::MatrixXd Lambda(6, 6);
-    control_utils::PInverse(Lambda_inv, Lambda);
-
-    Eigen::Matrix<double, 7, 6> J_inv;
-    J_inv << M_inv * jacobian.transpose() * Lambda;
-    Eigen::Matrix<double, 7, 7> Nullspace;
-    Nullspace << Eigen::MatrixXd::Identity(7, 7) - jacobian.transpose() * J_inv.transpose();
 
     // Decoupled mass matrices
     Eigen::MatrixXd Lambda_pos_inv(3, 3);
@@ -225,8 +225,8 @@ std::array<double, 7> OSCImpedanceController::Step(
     pos_error = pos_error.unaryExpr([](double x) { return (abs(x) < 1e-4) ? 0. : x; });
     ori_error = ori_error.unaryExpr([](double x) { return (abs(x) < 5e-3) ? 0. : x; });
 
-    // std::cout << "OSC::pos_error " << pos_error.transpose() << std::endl;
-    // std::cout << "OSC::ori_error " << ori_error.transpose() << std::endl;
+    // std::cerr << "OSC::pos_error " << pos_error.transpose() << std::endl;
+    // std::cerr << "OSC::ori_error " << ori_error.transpose() << std::endl;
 
     tau_d << jacobian_pos.transpose() * (Lambda_pos * (Kp_p * pos_error - Kd_p * (jacobian_pos * current_dq))) +
              jacobian_ori.transpose() * (Lambda_ori * (Kp_r * ori_error - Kd_r * (jacobian_ori * current_dq)));
@@ -248,9 +248,7 @@ std::array<double, 7> OSCImpedanceController::Step(
     pos_error = pos_error.unaryExpr([](double x) { return (abs(x) < 1e-4) ? 0. : x; });
     ori_error = ori_error.unaryExpr([](double x) { return (abs(x) < 5e-3) ? 0. : x; });
 
-    std::array<double, 42> jacobian_array = model_->zeroJacobian(franka::Frame::kEndEffector, robot_state);
-    Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-    Eigen::Matrix<double, 7, 6>> jacobian_pinverse;
+    Eigen::Matrix<double, 7, 6> jacobian_pinverse;
     jacobian_pinverse = jacobian.transpose() * (jacobian * jacobian.transpose()).inverse();
     Eigen::Matrix<double, 6, 1> error;
     error << pos_error, ori_error;
@@ -259,6 +257,9 @@ std::array<double, 7> OSCImpedanceController::Step(
     desired_q << current_q + jacobian_pinverse * error;
 
     tau_d << diff_ik_kp_.cwiseProduct(desired_q - current_q) - diff_ik_kd_.cwiseProduct(current_dq);
+
+    // std::cerr << "OSCIK::pos_error" << pos_error.transpose() << std::endl;
+    // std::cerr << "OSCIK::ori_error" << ori_error.transpose() << std::endl;
   } // end if (use_diff_ik_)
 
   if (getGlobalHandler()->log_controller) {
